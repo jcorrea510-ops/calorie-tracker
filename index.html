@@ -578,7 +578,6 @@
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
 
-                // Define the expected JSON schema for the LLM response
                 const payload = {
                     contents: chatHistory,
                     generationConfig: {
@@ -705,7 +704,7 @@
                 <div>
                     <p class="text-gray-600 text-sm">Protein (g)</p>
                     <p class="text-xl font-semibold text-indigo-700"><span id="currentProteinDisplay">0</span> / <span id="proteinGoalDisplay">0</span></p>
-                    <div class="progress-bar-container">
+                    <div id="proteinProgressBarContainer" class="progress-bar-container"> <!-- Added a wrapper div with unique ID -->
                         <div id="proteinProgressBar" class="progress-bar-fill"></div>
                     </div>
                     <p class="text-gray-600 text-sm mt-2">Left: <span id="proteinLeftDisplay" class="font-semibold">0</span>g</p>
@@ -713,7 +712,7 @@
                 <div>
                     <p class="text-gray-600 text-sm">Calories</p>
                     <p class="text-xl font-semibold text-indigo-700"><span id="currentCalorieDisplay">0</span> / <span id="calorieGoalDisplay">0</span></p>
-                    <div class="progress-bar-container">
+                    <div id="calorieProgressBarContainer" class="progress-bar-container"> <!-- Added a wrapper div with unique ID -->
                         <div id="calorieProgressBar" class="progress-bar-fill"></div>
                     </div>
                     <p class="text-gray-600 text-sm mt-2">Left: <span id="caloriesLeftDisplay" class="font-semibold">0</span></p>
