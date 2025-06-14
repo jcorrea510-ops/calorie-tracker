@@ -187,7 +187,7 @@
             color: #cbd5e0;
         }
 
-        /* Message Box - REMOVED FUNCTIONALITY, BUT KEEPING STYLES FOR CONSISTENCY IF RE-ADDED */
+        /* Message Box - Styling kept, but no JS calls to show it */
         .message-box {
             background-color: #2d3748; /* Dark background */
             color: #e2e8f0; /* Light text */
@@ -341,49 +341,68 @@
             // Set UI ready flag
             isUiReady = true;
 
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+            // --- Firebase Initialization for GitHub Pages ---
+            // On GitHub Pages, __app_id and __firebase_config are not provided by default.
+            // We'll use dummy values to prevent JavaScript errors if they're undefined.
+            // Full Firebase functionality (data persistence) will require a backend
+            // to provide proper credentials, but the UI won't crash.
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-pages-default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+                apiKey: "dummy-api-key",
+                authDomain: "dummy-auth-domain",
+                projectId: "dummy-project-id",
+                storageBucket: "dummy-storage-bucket",
+                messagingSenderId: "dummy-messaging-sender-id",
+                appId: "dummy-app-id"
+            };
 
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.error("Firebase config is missing. Please ensure __firebase_config is provided.");
-                // Removed showMessageBox("Firebase config missing. Data saving won't work.", 'error');
-                return;
-            }
+            // Only initialize Firebase if we have a proper project ID (or if running in Canvas)
+            if (firebaseConfig.projectId && firebaseConfig.projectId !== "dummy-project-id" || typeof __app_id !== 'undefined') {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-
-            // Authenticate user
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                    console.log("Authenticated with user ID:", userId);
-                    // Start listening for data only after authentication
-                    listenForGoals();
-                    listenForFoodEntries();
-                } else {
-                    try {
-                        // Sign in anonymously if no user is found
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                            console.log("Signed in with custom token.");
-                        } else {
-                            await signInAnonymously(auth);
-                            console.log("Signed in anonymously.");
+                // Authenticate user
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Authenticated with user ID:", userId);
+                        // Start listening for data only after authentication
+                        listenForGoals();
+                        listenForFoodEntries();
+                    } else {
+                        try {
+                            // Sign in anonymously if no user is found
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                                console.log("Signed in with custom token.");
+                            } else {
+                                await signInAnonymously(auth);
+                                console.log("Signed in anonymously.");
+                            }
+                        } catch (error) {
+                            console.error("Firebase authentication error:", error);
                         }
-                    } catch (error) {
-                        console.error("Firebase authentication error:", error);
-                        // Removed showMessageBox("Authentication failed. Please try again.", 'error');
                     }
-                }
-            });
+                });
+            } else {
+                console.warn("Firebase is not fully configured. Data persistence will not work on this host.");
+                // Set initial UI values since Firestore won't be loading them
+                currentProteinGoal = 100;
+                currentCalorieGoal = 2000;
+                updateSummaryDisplay();
+            }
         };
 
         // --- Firestore Listeners ---
 
         // Listen for daily goals
         function listenForGoals() {
+            // Check if db is initialized before trying to use it
+            if (!db) {
+                console.warn("Firestore db not initialized. Cannot listen for goals.");
+                return;
+            }
             const goalsDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/goals/daily`);
             onSnapshot(goalsDocRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -396,18 +415,24 @@
                     // Set default goals if none exist
                     currentProteinGoal = 100;
                     currentCalorieGoal = 2000;
-                    setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal })
-                        .then(() => console.log("Default goals set."))
-                        .catch(error => console.error("Error setting default goals:", error));
+                    if (db) { // Only attempt to set if db is initialized
+                        setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal })
+                            .then(() => console.log("Default goals set."))
+                            .catch(error => console.error("Error setting default goals:", error));
+                    }
                 }
             }, (error) => {
                 console.error("Error listening to goals:", error);
-                // Removed showMessageBox("Error loading goals. Check console.", 'error');
             });
         }
 
         // Listen for daily food entries and calculate totals (reset at 3 AM UTC)
         function listenForFoodEntries() {
+            // Check if db is initialized before trying to use it
+            if (!db) {
+                console.warn("Firestore db not initialized. Cannot listen for food entries.");
+                return;
+            }
             const foodEntriesCollectionRef = collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`);
 
             const startOfCalorieDay = getStartOfCalorieDayUTC();
@@ -435,7 +460,6 @@
                 console.log("Food entries updated. Total Protein:", totalProteinConsumed, "Total Calories:", totalCaloriesConsumed);
             }, (error) => {
                 console.error("Error listening to food entries:", error);
-                // Removed showMessageBox("Error loading food entries. Check console.", 'error');
             });
         }
 
@@ -491,7 +515,11 @@
             const calories = parseFloat(manualCaloriesInput.value);
 
             if (isNaN(protein) || isNaN(calories) || protein < 0 || calories < 0) {
-                // Removed showMessageBox
+                console.error('Invalid input for manual entry.');
+                return;
+            }
+            if (!db) {
+                console.warn("Firestore db not initialized. Cannot add manual entry.");
                 return;
             }
 
@@ -503,12 +531,10 @@
                     calories: calories,
                     timestamp: serverTimestamp() // Use server timestamp
                 });
-                // Removed showMessageBox('Manual entry added!', 'success');
                 manualProteinInput.value = '';
                 manualCaloriesInput.value = '';
             } catch (e) {
                 console.error("Error adding document: ", e);
-                // Removed showMessageBox('Failed to add entry. Check console.', 'error');
             } finally {
                 showLoading(false);
             }
@@ -519,15 +545,18 @@
             const quantity = parseFloat(searchFoodQuantityInput.value) || 1; // Default to 1 if not entered or invalid
 
             if (!foodName) {
-                // Removed showMessageBox
+                console.error('Please enter a food name to search.');
                 return;
             }
             if (isNaN(quantity) || quantity <= 0) {
-                // Removed showMessageBox
+                console.error('Quantity must be a positive number.');
+                return;
+            }
+            if (!db) {
+                console.warn("Firestore db not initialized. Cannot search and add macros.");
                 return;
             }
 
-            // Removed showMessageBox('Searching for macros...', 'info');
             showLoading(true);
 
             try {
@@ -587,18 +616,16 @@
                             calories: finalCalories,
                             timestamp: serverTimestamp()
                         });
-                        // Removed showMessageBox(`Added ${quantity}x ${parsedMacros.foodName} (${finalProtein.toFixed(0)}g P, ${finalCalories.toFixed(0)})`, 'success');
                         searchFoodNameInput.value = '';
                         searchFoodQuantityInput.value = ''; // Clear quantity after adding
                     } else {
-                        // Removed showMessageBox('Could not get valid macro data from AI. Please try manual entry.', 'error');
+                        console.error('Could not get valid macro data from AI. Please try manual entry.');
                     }
                 } else {
-                    // Removed showMessageBox('AI could not find macros for this food. Try manual entry.', 'error');
+                    console.error('AI could not find macros for this food. Try manual entry.');
                 }
             } catch (error) {
                 console.error("Error searching food with AI:", error);
-                // Removed showMessageBox(`Error: ${error.message}`, 'error');
             } finally {
                 showLoading(false);
             }
@@ -619,7 +646,11 @@
             const newCalorieGoal = parseFloat(settingsCalorieGoalInput.value);
 
             if (isNaN(newProteinGoal) || isNaN(newCalorieGoal) || newProteinGoal < 0 || newCalorieGoal < 0) {
-                // Removed showMessageBox
+                console.error('Please enter valid positive numbers for goals.');
+                return;
+            }
+            if (!db) {
+                console.warn("Firestore db not initialized. Cannot save settings.");
                 return;
             }
 
@@ -630,11 +661,9 @@
                     proteinGoal: newProteinGoal,
                     calorieGoal: newCalorieGoal
                 }, { merge: true }); // Use merge to only update specified fields
-                // Removed showMessageBox('Goals saved successfully!', 'success');
                 settingsModal.classList.remove('open');
             } catch (e) {
                 console.error("Error saving goals: ", e);
-                // Removed showMessageBox('Failed to save goals. Check console.', 'error');
             } finally {
                 showLoading(false);
             }
