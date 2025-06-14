@@ -329,9 +329,9 @@
             caloriesLeftDisplay = document.getElementById('caloriesLeftDisplay');
             proteinProgressBarFill = document.getElementById('proteinProgressBar');
             calorieProgressBarFill = document.getElementById('calorieProgressBar');
-            manualCaloriesInput = document.getElementById('manualCalories'); // Changed order
-            manualProteinInput = document.getElementById('manualProtein');    // Changed order
-            manualQuantityInput = document.getElementById('manualQuantity'); // New
+            manualCaloriesInput = document.getElementById('manualCalories');
+            manualProteinInput = document.getElementById('manualProtein');
+            manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
             searchFoodQuantityInput = document.getElementById('searchFoodQuantity');
             settingsModal = document.getElementById('settingsModal');
@@ -515,9 +515,9 @@
         // --- Event Handlers ---
 
         async function addManualFoodEntry() {
-            const calories = parseFloat(manualCaloriesInput.value); // Changed order
-            const protein = parseFloat(manualProteinInput.value);   // Changed order
-            const quantity = parseFloat(manualQuantityInput.value) || 1; // Get quantity, default to 1
+            const calories = parseFloat(manualCaloriesInput.value);
+            const protein = parseFloat(manualProteinInput.value);
+            const quantity = parseFloat(manualQuantityInput.value) || 1;
 
             if (isNaN(calories) || isNaN(protein) || isNaN(quantity) || calories < 0 || protein < 0 || quantity <= 0) {
                 console.error('Please enter valid positive numbers for calories, protein, and quantity.');
@@ -534,21 +534,21 @@
                 updateSummaryDisplay();
                 manualCaloriesInput.value = '';
                 manualProteinInput.value = '';
-                manualQuantityInput.value = ''; // Clear quantity
+                manualQuantityInput.value = '';
                 return;
             }
 
             try {
                 showLoading(true);
                 await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                    name: `Manual Entry (${quantity}x)`, // Indicate quantity in name
+                    name: `Manual Entry (${quantity}x)`,
                     protein: finalProtein,
                     calories: finalCalories,
                     timestamp: serverTimestamp()
                 });
                 manualCaloriesInput.value = '';
                 manualProteinInput.value = '';
-                manualQuantityInput.value = ''; // Clear quantity
+                manualQuantityInput.value = '';
             } catch (e) {
                 console.error("Error adding document: ", e);
             } finally {
@@ -569,16 +569,14 @@
                 return;
             }
 
-            // *** IMPORTANT: For AI Search to work on GitHub Pages, you need a Google Cloud API Key
-            // *** that is enabled for the Gemini API. Replace "YOUR_GOOGLE_CLOUD_API_KEY_HERE"
-            // *** with your actual key from Google Cloud Console (APIs & Services > Credentials).
-            // *** Keep the API key empty if testing only in the Canvas environment.
-            const apiKey = "YOUR_GOOGLE_CLOUD_API_KEY_HERE"; // <<<--- REPLACE WITH YOUR ACTUAL GOOGLE CLOUD API KEY FOR EXTERNAL DEPLOYMENT
+            // YOUR GOOGLE CLOUD API KEY FOR GEMINI API
+            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE"; // This is your provided key
 
-            if (!db && apiKey === "YOUR_GOOGLE_CLOUD_API_KEY_HERE") { // Check if DB is not initialized AND API Key is still default
+            if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") { // Check if DB is not initialized AND API Key is still default
                 console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
                 return; // Prevent AI search if not configured
             }
+
 
             showLoading(true);
 
@@ -603,7 +601,6 @@
                     }
                 };
 
-                // Use the API key here
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
