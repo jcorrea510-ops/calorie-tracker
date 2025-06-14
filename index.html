@@ -255,7 +255,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global variables for Firebase instances
         let app;
@@ -268,6 +268,7 @@
         let totalProteinConsumed = 0; // Track total protein consumed
         let totalCaloriesConsumed = 0; // Track total calories consumed
         let isUiReady = false; // Flag to ensure UI elements are ready
+        let unsubscribeFoodListener = null; // To hold the unsubscribe function for food entries listener
 
         // UI Elements (declared globally, assigned in window.onload)
         let proteinGoalDisplay;
@@ -282,7 +283,6 @@
         let manualProteinInput;
         let manualQuantityInput;
         let searchFoodNameInput;
-        // Removed searchFoodQuantityInput
         let settingsModal;
         let settingsProteinGoalInput;
         let settingsCalorieGoalInput;
@@ -340,16 +340,53 @@
 
             console.log(`Scheduling daily reset for: ${nextResetTime.toISOString()} (in ${timeUntilReset / 1000 / 60} minutes)`);
 
-            setTimeout(() => {
+            setTimeout(async () => {
                 console.log("Daily reset triggered!");
-                // Force reset totals and update UI
-                totalProteinConsumed = 0;
-                totalCaloriesConsumed = 0;
-                updateSummaryDisplay();
-                // Re-call listenForFoodEntries to re-subscribe with the new day's query range
-                listenForFoodEntries(); // This will fetch current day's (new day's) entries
+                // Clear all entries from Firestore for the day that just ended
+                await resetDailyTotalsInFirestore(); // This will clear the previous day's data
+
+                // Re-establish the food entries listener for the new day
+                // This will automatically set totals to 0 if no entries exist for the new day
+                listenForFoodEntries();
+
                 scheduleDailyReset(); // Schedule the next reset
             }, timeUntilReset);
+        }
+
+        // Function to reset daily totals by deleting records in Firestore
+        async function resetDailyTotalsInFirestore() {
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot reset data.");
+                return;
+            }
+            showLoading(true);
+            try {
+                const foodEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/foodEntries`);
+                const startOfCalorieDay = getStartOfCalorieDayUTC(); // Get the start of the day whose data needs to be cleared
+                const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1); // 24 hours minus 1 ms
+
+                const q = query(foodEntriesCollectionRef,
+                    where("timestamp", ">=", startOfCalorieDay),
+                    where("timestamp", "<=", endOfCalorieDay)
+                );
+
+                const querySnapshot = await getDocs(q);
+                const deletePromises = [];
+
+                if (querySnapshot.empty) {
+                    console.log("No entries to reset for today.");
+                } else {
+                    querySnapshot.forEach((doc) => {
+                        deletePromises.push(deleteDoc(doc.ref));
+                    });
+                    await Promise.all(deletePromises);
+                    console.log(`Successfully deleted ${querySnapshot.size} food entries for the current day.`);
+                }
+            } catch (error) {
+                console.error("Error resetting daily totals in Firestore:", error);
+            } finally {
+                showLoading(false);
+            }
         }
 
 
@@ -379,6 +416,7 @@
             document.getElementById('searchFoodBtn').addEventListener('click', searchFoodAndAutoAddMacros);
             document.getElementById('openSettingsBtn').addEventListener('click', openSettingsModal);
             document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
+            document.getElementById('resetDailyBtn').addEventListener('click', resetDailyTotalsInFirestore); // Event listener for the new reset button
             if (settingsModal) {
                 settingsModal.addEventListener('click', (e) => {
                     if (e.target === settingsModal) {
@@ -398,8 +436,8 @@
                 authDomain: "calorie-tracker-10dc5.firebaseapp.com",
                 projectId: "calorie-tracker-10dc5",
                 storageBucket: "calorie-tracker-10dc5.firebasestorage.app",
-                messagingSenderId: "980712360641",
                 appId: "1:980712360641:web:5ec3e7b33dcab547556240",
+                messagingSenderId: "980712360641",
                 measurementId: "G-G59S80WVVD"
             };
 
@@ -477,6 +515,12 @@
                 console.warn("Firestore db, appId, or userId not initialized. Cannot listen for food entries.");
                 return;
             }
+            // Unsubscribe from previous listener if it exists to prevent multiple listeners
+            if (unsubscribeFoodListener) {
+                unsubscribeFoodListener();
+                console.log("Unsubscribed from previous food entries listener.");
+            }
+
             const foodEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/foodEntries`);
 
             const startOfCalorieDay = getStartOfCalorieDayUTC();
@@ -487,7 +531,8 @@
                 where("timestamp", "<=", endOfCalorieDay)
             );
 
-            onSnapshot(q, (snapshot) => {
+            // Assign the new unsubscribe function
+            unsubscribeFoodListener = onSnapshot(q, (snapshot) => {
                 totalProteinConsumed = 0;
                 totalCaloriesConsumed = 0;
 
@@ -550,17 +595,20 @@
         // --- Event Handlers ---
 
         async function addManualFoodEntry() {
-            const calories = parseFloat(manualCaloriesInput.value);
-            // Allow protein to be 0 if blank or invalid
-            const protein = parseFloat(manualProteinInput.value) || 0;
-            const quantity = parseFloat(manualQuantityInput.value) || 1;
+            // Treat empty string for calories as 0, otherwise parse.
+            const calories = manualCaloriesInput.value === '' ? 0 : parseFloat(manualCaloriesInput.value);
+            // Treat empty string for protein as 0, otherwise parse.
+            const protein = manualProteinInput.value === '' ? 0 : parseFloat(manualProteinInput.value);
+            // Treat empty string for quantity as 1, otherwise parse.
+            const quantity = manualQuantityInput.value === '' ? 1 : parseFloat(manualQuantityInput.value);
 
-            // Validate essential inputs
-            if (isNaN(calories) || calories < 0 || isNaN(quantity) || quantity <= 0) {
-                console.error('Please enter valid positive numbers for calories and quantity.');
+            // Now validate the parsed numbers
+            if (isNaN(calories) || calories < 0 ||
+                isNaN(protein) || protein < 0 || // Still validate protein if explicitly entered
+                isNaN(quantity) || quantity <= 0) {
+                console.error('Please enter valid positive numbers for calories, protein (or leave blank), and quantity (must be greater than zero).');
                 return;
             }
-            // Protein is already handled to be 0 if blank, so no separate NaN check needed for it here.
 
             const finalCalories = calories * quantity;
             const finalProtein = protein * quantity;
@@ -657,13 +705,12 @@
                     const parsedMacros = JSON.parse(jsonString);
 
                     if (parsedMacros.protein !== undefined && parsedMacros.calories !== undefined) {
-                        // Use AI's calculated totals directly, as it should account for quantity in the prompt
                         const finalProtein = parsedMacros.protein;
                         const finalCalories = parsedMacros.calories;
 
                         if (db) {
                             await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                                name: parsedMacros.foodName || foodName, // Use AI's echo of food name
+                                name: parsedMacros.foodName || foodName,
                                 protein: finalProtein,
                                 calories: finalCalories,
                                 timestamp: serverTimestamp()
@@ -756,6 +803,7 @@
                 </div>
             </div>
             <button id="openSettingsBtn" class="w-full secondary-button mt-4">Set Goals</button>
+            <button id="resetDailyBtn" class="w-full secondary-button mt-2">Reset All Data for Today</button>
         </div>
 
         <!-- Add Food Section -->
