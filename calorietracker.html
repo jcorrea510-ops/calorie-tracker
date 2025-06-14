@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Calorie Tracker</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Dark Mode Styles - Deep, consistent dark theme */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Deep dark background */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        #app-container {
+            background-color: #2d3748; /* Main container background, a muted dark blue-gray */
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4); /* Prominent dark shadow */
+            max-width: 480px;
+            width: 100%;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e2e8f0; /* Light text for titles */
+            margin-bottom: 1rem;
+        }
+        input[type="number"],
+        input[type="text"] {
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            border: 1px solid #4a5568; /* Darker border for inputs */
+            font-size: 1rem;
+            background-color: #2D3748 !important; /* Explicitly set input background to dark, with !important */
+            color: #e2e8f0; /* Light text for inputs */
+            outline: none; /* Remove default outline */
+            flex-grow: 1; /* Allow inputs to grow */
+            box-shadow: none; /* Ensure no accidental light box shadow */
+            -webkit-appearance: none; /* For iOS Safari */
+            -moz-appearance: none; /* For Firefox */
+            appearance: none; /* Standard property */
+        }
+        input[type="number"]:focus,
+        input[type="text"]:focus {
+            border-color: #667eea; /* Highlight border on focus */
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5); /* Subtle glow on focus */
+        }
+        input[type="number"]::placeholder,
+        input[type="text"]::placeholder {
+            color: #a0aec0; /* Lighter placeholder text */
+        }
+        button {
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out, box-shadow 0.2s ease-in-out;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Enhanced shadow for buttons */
+        }
+        button:hover {
+            transform: translateY(-2px); /* More pronounced lift on hover */
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4); /* Deeper shadow on hover */
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Smaller shadow on click */
+        }
+        /* Primary button */
+        #addManualFoodBtn, #searchFoodBtn, #saveSettingsBtn {
+            background-color: #667eea; /* Vibrant Indigo primary button */
+            color: white;
+        }
+        #addManualFoodBtn:hover, #searchFoodBtn:hover, #saveSettingsBtn:hover {
+            background-color: #5a67d8; /* Darker indigo on hover */
+        }
+        /* Secondary button (Set Goals) */
+        .secondary-button {
+            background-color: #4a5568; /* Dark gray secondary button */
+            color: #e2e8f0; /* Light text */
+        }
+        .secondary-button:hover {
+            background-color: #3b4558; /* Darker gray on hover */
+        }
+
+        /* Progress Bars */
+        .progress-bar-container {
+            background-color: #4a5568; /* Darker gray for progress container */
+            border-radius: 0.75rem;
+            height: 1rem;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background-color: #48bb78; /* Green fill */
+            width: 0%;
+            border-radius: 0.75rem;
+            transition: width 0.5s ease-in-out;
+        }
+        .progress-bar-fill.warning {
+            background-color: #ecc94b; /* Yellow for approaching goal */
+        }
+        .progress-bar-fill.exceeded {
+            background-color: #f56565; /* Red for exceeding goal */
+        }
+
+        /* Section Backgrounds - unified dark tones */
+        /* Overriding specific Tailwind classes to ensure deep dark colors */
+        .bg-indigo-50 { /* Summary Section */
+            background-color: #3b4558 !important; /* A darker, richer blue-gray for summary */
+        }
+        .text-indigo-800, .text-indigo-700 { /* Text colors for summary */
+            color: #a7b7e8 !important; /* Lighter, soft indigo text */
+        }
+        .text-gray-600 { /* General descriptive text */
+            color: #cbd5e0 !important; /* Lighter gray text */
+        }
+        .text-gray-800 { /* Main headings and important text */
+            color: #e2e8f0 !important; /* Lightest gray text */
+        }
+        /* Make 'Add Food' section stand out more */
+        .bg-gray-50 { /* This is the Add Food Section */
+            background-color: #3b4558 !important; /* Same as summary for consistency, but with stronger shadow */
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6) !important; /* Stronger shadow */
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.8); /* Darker, more opaque overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: #2d3748; /* Modal background same as app container */
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); /* Even deeper shadow for modals */
+            max-width: 400px;
+            width: 90%;
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            opacity: 0; /* Start hidden for smooth fade-in */
+            transform: scale(0.9); /* Start slightly smaller for pop-in effect */
+            max-height: 80vh; /* Limit modal height */
+            overflow-y: auto; /* Enable scrolling for long content */
+        }
+        .modal-overlay.open .modal-content {
+            opacity: 1;
+            transform: scale(1); /* Scale to normal size */
+        }
+        .close-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #a0aec0; /* Lighter close button */
+        }
+        .close-button:hover {
+            color: #cbd5e0;
+        }
+
+        /* Message Box - REMOVED FUNCTIONALITY, BUT KEEPING STYLES FOR CONSISTENCY IF RE-ADDED */
+        .message-box {
+            background-color: #2d3748; /* Dark background */
+            color: #e2e8f0; /* Light text */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #4a5568; /* Darker border */
+            position: fixed; /* Keeping fixed positioning */
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            opacity: 0; /* Hidden by default */
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            min-width: 250px;
+            text-align: center;
+            padding: 1rem;
+            border-radius: 0.75rem;
+        }
+        /* Specific message box types (colors adjusted for dark mode) */
+        .message-box.bg-red-100 { background-color: #a72d2d !important; color: white !important; border-color: #7b2020 !important; } /* Darker red */
+        .message-box.bg-green-100 { background-color: #2c8c5c !important; color: white !important; border-color: #206d45 !important; } /* Darker green */
+        .message-box.bg-blue-100 { background-color: #2671ad !important; color: white !important; border-color: #1b5280 !important; } /* Darker blue */
+
+
+        /* Loading Spinner */
+        .loading-overlay {
+            background-color: rgba(0, 0, 0, 0.7); /* Darker overlay */
+        }
+        .spinner {
+            border-top: 4px solid #667eea; /* Lighter indigo spinner */
+        }
+
+        /* Crucial fixes for search input group */
+        .search-input-group {
+            display: flex;
+            flex-direction: column; /* Always stack vertically */
+            gap: 0.75rem; /* Gap between elements */
+            width: 100%; /* Ensure it takes full width of its parent */
+            box-sizing: border-box; /* Include padding and border in the element's total width */
+            align-items: stretch; /* Make children stretch to fill container height */
+        }
+        /* No specific @media (min-width: 640px) rule for flex-direction: row here, so it stays column */
+        .search-input-group input[type="text"],
+        .search-input-group input[type="number"],
+        .search-input-group button {
+            width: 100%; /* All items in the group take full width */
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+    </style>
+    <!-- Firebase SDK CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase instances
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; // Default to anonymous until authenticated
+        let currentProteinGoal = 0;
+        let currentCalorieGoal = 0;
+        let totalProteinConsumed = 0; // Track total protein consumed
+        let totalCaloriesConsumed = 0; // Track total calories consumed
+        let isUiReady = false; // Flag to ensure UI elements are ready
+
+        // UI Elements (declared globally, assigned in window.onload)
+        let proteinGoalDisplay;
+        let calorieGoalDisplay;
+        let currentProteinDisplay;
+        let currentCalorieDisplay;
+        let proteinLeftDisplay;
+        let caloriesLeftDisplay;
+        let proteinProgressBar;
+        let calorieProgressBar;
+        let manualProteinInput;
+        let manualCaloriesInput;
+        let searchFoodNameInput;
+        let searchFoodQuantityInput;
+        let settingsModal;
+        let settingsProteinGoalInput;
+        let settingsCalorieGoalInput;
+        let loadingOverlay;
+        let messageBox; // Keeping messageBox variable for showLoading, but showMessageBox functionality is removed
+
+
+        // Function to show/hide loading spinner (MessageBox itself is now hidden by default)
+        function showLoading(show) {
+            if (!loadingOverlay) return; // Prevent error if loadingOverlay isn't ready
+            if (show) {
+                loadingOverlay.classList.add('show');
+            } else {
+                loadingOverlay.classList.remove('show');
+            }
+        }
+
+        // Helper function to get the start of the current "calorie day" (3 AM UTC)
+        function getStartOfCalorieDayUTC() {
+            const now = new Date();
+            const year = now.getUTCFullYear();
+            const month = now.getUTCMonth();
+            const date = now.getUTCDate();
+            const hours = now.getUTCHours();
+
+            let startOfToday3AMUTC = new Date(Date.UTC(year, month, date, 3, 0, 0, 0));
+
+            // If current UTC time is before 3 AM UTC, the calorie day started yesterday at 3 AM UTC
+            if (hours < 3) {
+                startOfToday3AMUTC.setUTCDate(startOfToday3AMUTC.getUTCDate() - 1);
+            }
+            return startOfToday3AMUTC;
+        }
+
+
+        // Initialize Firebase and UI elements
+        window.onload = async () => {
+            // Assign UI elements AFTER DOM is loaded
+            proteinGoalDisplay = document.getElementById('proteinGoalDisplay');
+            calorieGoalDisplay = document.getElementById('calorieGoalDisplay');
+            currentProteinDisplay = document.getElementById('currentProteinDisplay');
+            currentCalorieDisplay = document.getElementById('currentCalorieDisplay');
+            proteinLeftDisplay = document.getElementById('proteinLeftDisplay');
+            caloriesLeftDisplay = document.getElementById('caloriesLeftDisplay');
+            proteinProgressBar = document.getElementById('proteinProgressBar');
+            calorieProgressBar = document.getElementById('calorieProgressBar');
+            manualProteinInput = document.getElementById('manualProtein');
+            manualCaloriesInput = document.getElementById('manualCalories');
+            searchFoodNameInput = document.getElementById('searchFoodName');
+            searchFoodQuantityInput = document.getElementById('searchFoodQuantity');
+            settingsModal = document.getElementById('settingsModal');
+            settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
+            settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
+            loadingOverlay = document.getElementById('loadingOverlay');
+            messageBox = document.getElementById('messageBox'); // Still get reference, but will not be actively shown.
+
+            // Add event listeners here after elements are assigned
+            document.getElementById('addManualFoodBtn').addEventListener('click', addManualFoodEntry);
+            document.getElementById('searchFoodBtn').addEventListener('click', searchFoodAndAutoAddMacros);
+            document.getElementById('openSettingsBtn').addEventListener('click', openSettingsModal);
+            document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
+            // Attach event listener to modal overlay itself to close on outside click
+            if (settingsModal) {
+                settingsModal.addEventListener('click', (e) => {
+                    if (e.target === settingsModal) { // Only close if clicking directly on the overlay
+                        closeSettingsModal();
+                    }
+                });
+            }
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+            // Set UI ready flag
+            isUiReady = true;
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase config is missing. Please ensure __firebase_config is provided.");
+                // Removed showMessageBox("Firebase config missing. Data saving won't work.", 'error');
+                return;
+            }
+
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Authenticate user
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    console.log("Authenticated with user ID:", userId);
+                    // Start listening for data only after authentication
+                    listenForGoals();
+                    listenForFoodEntries();
+                } else {
+                    try {
+                        // Sign in anonymously if no user is found
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                            console.log("Signed in with custom token.");
+                        } else {
+                            await signInAnonymously(auth);
+                            console.log("Signed in anonymously.");
+                        }
+                    } catch (error) {
+                        console.error("Firebase authentication error:", error);
+                        // Removed showMessageBox("Authentication failed. Please try again.", 'error');
+                    }
+                }
+            });
+        };
+
+        // --- Firestore Listeners ---
+
+        // Listen for daily goals
+        function listenForGoals() {
+            const goalsDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/goals/daily`);
+            onSnapshot(goalsDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    currentProteinGoal = data.proteinGoal || 0;
+                    currentCalorieGoal = data.calorieGoal || 0;
+                    updateSummaryDisplay();
+                    console.log("Goals updated:", data);
+                } else {
+                    // Set default goals if none exist
+                    currentProteinGoal = 100;
+                    currentCalorieGoal = 2000;
+                    setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal })
+                        .then(() => console.log("Default goals set."))
+                        .catch(error => console.error("Error setting default goals:", error));
+                }
+            }, (error) => {
+                console.error("Error listening to goals:", error);
+                // Removed showMessageBox("Error loading goals. Check console.", 'error');
+            });
+        }
+
+        // Listen for daily food entries and calculate totals (reset at 3 AM UTC)
+        function listenForFoodEntries() {
+            const foodEntriesCollectionRef = collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`);
+
+            const startOfCalorieDay = getStartOfCalorieDayUTC();
+            const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1); // 24 hours minus 1 ms
+
+            const q = query(foodEntriesCollectionRef,
+                where("timestamp", ">=", startOfCalorieDay),
+                where("timestamp", "<=", endOfCalorieDay)
+            );
+
+            onSnapshot(q, (snapshot) => {
+                totalProteinConsumed = 0;
+                totalCaloriesConsumed = 0;
+
+                snapshot.forEach((doc) => {
+                    const entry = doc.data();
+                    totalProteinConsumed += entry.protein;
+                    totalCaloriesConsumed += entry.calories;
+                });
+
+                currentProteinDisplay.textContent = totalProteinConsumed.toFixed(0);
+                currentCalorieDisplay.textContent = totalCaloriesConsumed.toFixed(0);
+
+                updateSummaryDisplay();
+                console.log("Food entries updated. Total Protein:", totalProteinConsumed, "Total Calories:", totalCaloriesConsumed);
+            }, (error) => {
+                console.error("Error listening to food entries:", error);
+                // Removed showMessageBox("Error loading food entries. Check console.", 'error');
+            });
+        }
+
+        // --- UI Update Functions ---
+
+        function updateSummaryDisplay() {
+            if (!isUiReady) return; // Only update UI if elements are guaranteed to be ready
+
+            proteinGoalDisplay.textContent = currentProteinGoal.toFixed(0);
+            calorieGoalDisplay.textContent = currentCalorieGoal.toFixed(0);
+
+            // Calculate and display "left" values
+            const proteinLeft = currentProteinGoal - totalProteinConsumed;
+            const caloriesLeft = currentCalorieGoal - totalCaloriesConsumed;
+
+            proteinLeftDisplay.textContent = proteinLeft.toFixed(0);
+            caloriesLeftDisplay.textContent = caloriesLeft.toFixed(0);
+
+            updateProgressBar(proteinProgressBar, totalProteinConsumed, currentProteinGoal);
+            updateProgressBar(calorieProgressBar, totalCaloriesConsumed, currentCalorieGoal);
+        }
+
+        function updateProgressBar(progressBarElement, current, goal) {
+            // Ensure the element and its children exist before trying to manipulate them
+            if (!progressBarElement) {
+                console.warn("Progress bar element not found:", progressBarElement);
+                return;
+            }
+            const fillElement = progressBarElement.querySelector('.progress-bar-fill');
+            if (!fillElement) {
+                console.warn("Progress bar fill element not found inside:", progressBarElement);
+                return;
+            }
+
+            let percentage = (goal > 0) ? (current / goal) * 100 : 0;
+            // Cap at 100% for visual fill, but allow values over 100% to reflect in the UI text if needed
+            const visualPercentage = Math.min(percentage, 100);
+
+            fillElement.style.width = `${visualPercentage}%`;
+
+            fillElement.classList.remove('warning', 'exceeded');
+            if (current > goal) {
+                fillElement.classList.add('exceeded');
+            } else if (current > goal * 0.8) { // 80% of goal
+                fillElement.classList.add('warning');
+            }
+        }
+
+        // --- Event Handlers ---
+
+        async function addManualFoodEntry() {
+            const protein = parseFloat(manualProteinInput.value);
+            const calories = parseFloat(manualCaloriesInput.value);
+
+            if (isNaN(protein) || isNaN(calories) || protein < 0 || calories < 0) {
+                // Removed showMessageBox
+                return;
+            }
+
+            try {
+                showLoading(true);
+                await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
+                    name: 'Manual Entry', // Default name for manual entries
+                    protein: protein,
+                    calories: calories,
+                    timestamp: serverTimestamp() // Use server timestamp
+                });
+                // Removed showMessageBox('Manual entry added!', 'success');
+                manualProteinInput.value = '';
+                manualCaloriesInput.value = '';
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                // Removed showMessageBox('Failed to add entry. Check console.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function searchFoodAndAutoAddMacros() {
+            const foodName = searchFoodNameInput.value.trim();
+            const quantity = parseFloat(searchFoodQuantityInput.value) || 1; // Default to 1 if not entered or invalid
+
+            if (!foodName) {
+                // Removed showMessageBox
+                return;
+            }
+            if (isNaN(quantity) || quantity <= 0) {
+                // Removed showMessageBox
+                return;
+            }
+
+            // Removed showMessageBox('Searching for macros...', 'info');
+            showLoading(true);
+
+            try {
+                // Prepare the prompt for the LLM
+                const prompt = `Estimate the protein (in grams) and calories for '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "chicken breast", "protein": 31, "calories": 165 }`;
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                // Define the expected JSON schema for the LLM response
+                const payload = {
+                    contents: chatHistory,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "foodName": { "type": "STRING" },
+                                "protein": { "type": "NUMBER" },
+                                "calories": { "type": "NUMBER" }
+                            },
+                            required: ["foodName", "protein", "calories"]
+                        }
+                    }
+                };
+
+                const apiKey = ""; // API key will be provided by the Canvas runtime
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonString = result.candidates[0].content.parts[0].text;
+                    const parsedMacros = JSON.parse(jsonString);
+
+                    if (parsedMacros.protein !== undefined && parsedMacros.calories !== undefined) {
+                        // Apply quantity
+                        const finalProtein = parsedMacros.protein * quantity;
+                        const finalCalories = parsedMacros.calories * quantity;
+
+                        // Add to Firestore
+                        await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
+                            name: `${parsedMacros.foodName || foodName} (${quantity}x)`, // Use LLM's foodName + quantity, else user's input
+                            protein: finalProtein,
+                            calories: finalCalories,
+                            timestamp: serverTimestamp()
+                        });
+                        // Removed showMessageBox(`Added ${quantity}x ${parsedMacros.foodName} (${finalProtein.toFixed(0)}g P, ${finalCalories.toFixed(0)})`, 'success');
+                        searchFoodNameInput.value = '';
+                        searchFoodQuantityInput.value = ''; // Clear quantity after adding
+                    } else {
+                        // Removed showMessageBox('Could not get valid macro data from AI. Please try manual entry.', 'error');
+                    }
+                } else {
+                    // Removed showMessageBox('AI could not find macros for this food. Try manual entry.', 'error');
+                }
+            } catch (error) {
+                console.error("Error searching food with AI:", error);
+                // Removed showMessageBox(`Error: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function openSettingsModal() {
+            settingsProteinGoalInput.value = currentProteinGoal;
+            settingsCalorieGoalInput.value = currentCalorieGoal;
+            settingsModal.classList.add('open');
+        }
+
+        function closeSettingsModal() {
+            settingsModal.classList.remove('open');
+        }
+
+        async function saveSettings() {
+            const newProteinGoal = parseFloat(settingsProteinGoalInput.value);
+            const newCalorieGoal = parseFloat(settingsCalorieGoalInput.value);
+
+            if (isNaN(newProteinGoal) || isNaN(newCalorieGoal) || newProteinGoal < 0 || newCalorieGoal < 0) {
+                // Removed showMessageBox
+                return;
+            }
+
+            try {
+                showLoading(true);
+                const goalsDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/goals/daily`);
+                await setDoc(goalsDocRef, {
+                    proteinGoal: newProteinGoal,
+                    calorieGoal: newCalorieGoal
+                }, { merge: true }); // Use merge to only update specified fields
+                // Removed showMessageBox('Goals saved successfully!', 'success');
+                settingsModal.classList.remove('open');
+            } catch (e) {
+                console.error("Error saving goals: ", e);
+                // Removed showMessageBox('Failed to save goals. Check console.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+    </script>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4 sm:p-6 md:p-8">
+    <div id="app-container" class="space-y-6">
+        <h1 class="text-3xl font-bold text-center text-gray-800">Calorie Tracker</h1>
+
+        <!-- Daily Summary Section -->
+        <div class="bg-indigo-50 p-6 rounded-2xl shadow-md">
+            <h2 class="section-title text-indigo-800">Daily Summary</h2>
+            <div class="grid grid-cols-2 gap-4 text-center mb-4">
+                <div>
+                    <p class="text-gray-600 text-sm">Protein (g)</p>
+                    <p class="text-xl font-semibold text-indigo-700"><span id="currentProteinDisplay">0</span> / <span id="proteinGoalDisplay">0</span></p>
+                    <div class="progress-bar-container">
+                        <div id="proteinProgressBar" class="progress-bar-fill"></div>
+                    </div>
+                    <p class="text-gray-600 text-sm mt-2">Left: <span id="proteinLeftDisplay" class="font-semibold">0</span>g</p>
+                </div>
+                <div>
+                    <p class="text-gray-600 text-sm">Calories</p>
+                    <p class="text-xl font-semibold text-indigo-700"><span id="currentCalorieDisplay">0</span> / <span id="calorieGoalDisplay">0</span></p>
+                    <div class="progress-bar-container">
+                        <div id="calorieProgressBar" class="progress-bar-fill"></div>
+                    </div>
+                    <p class="text-gray-600 text-sm mt-2">Left: <span id="caloriesLeftDisplay" class="font-semibold">0</span></p>
+                </div>
+            </div>
+            <button id="openSettingsBtn" class="w-full secondary-button mt-4">Set Goals</button>
+        </div>
+
+        <!-- Add Food Section -->
+        <div class="bg-gray-50 p-6 rounded-2xl shadow-md">
+            <h2 class="section-title text-gray-800">Add Food</h2>
+
+            <!-- Manual Entry -->
+            <div class="mb-6"> <!-- Added mb-6 for spacing between the two add sections -->
+                <h3 class="font-semibold text-gray-800 mb-2">Manually Add Macros</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    <input type="number" id="manualProtein" placeholder="Protein (g)" class="col-span-2 sm:col-span-1">
+                    <input type="number" id="manualCalories" placeholder="Calories" class="col-span-2 sm:col-span-1">
+                </div>
+                <button id="addManualFoodBtn" class="w-full">Add Manual Entry</button>
+            </div>
+
+            <!-- Search Food (AI Powered) -->
+            <div>
+                <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
+                <div class="search-input-group">
+                    <input type="text" id="searchFoodName" placeholder="e.g., chicken breast, apple">
+                    <input type="number" id="searchFoodQuantity" placeholder="Qty (e.g., 2)">
+                    <button id="searchFoodBtn">Add</button> <!-- Changed button text to "Add" -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-button" id="closeSettingsBtn">&times;</button>
+            <h2 class="section-title text-gray-800 mb-4">Set Daily Goals</h2>
+            <div class="mb-4">
+                <label for="settingsProteinGoal" class="block text-gray-700 text-sm font-bold mb-2">Protein Goal (g)</label>
+                <input type="number" id="settingsProteinGoal" class="w-full" placeholder="e.g., 150">
+            </div>
+            <div class="mb-6">
+                <label for="settingsCalorieGoal" class="block text-gray-700 text-sm font-bold mb-2">Calorie Goal</label>
+                <input type="number" id="settingsCalorieGoal" class="w-full" placeholder="e.g., 2000">
+            </div>
+            <button id="saveSettingsBtn" class="w-full">Save Goals</button>
+        </div>
+    </div>
+
+    <!-- Message Box (Toast) - Styling kept, but no JS calls to show it -->
+    <div id="messageBox" class="message-box"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+</body>
+</html>
