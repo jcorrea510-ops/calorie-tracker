@@ -261,8 +261,8 @@
         let currentCalorieDisplay;
         let proteinLeftDisplay;
         let caloriesLeftDisplay;
-        let proteinProgressBar;
-        let calorieProgressBar;
+        let proteinProgressBarFill;
+        let calorieProgressBarFill;
         let manualProteinInput;
         let manualCaloriesInput;
         let searchFoodNameInput;
@@ -271,12 +271,12 @@
         let settingsProteinGoalInput;
         let settingsCalorieGoalInput;
         let loadingOverlay;
-        let messageBox; // Keeping messageBox variable for showLoading, but showMessageBox functionality is removed
+        let messageBox;
 
 
-        // Function to show/hide loading spinner (MessageBox itself is now hidden by default)
+        // Function to show/hide loading spinner
         function showLoading(show) {
-            if (!loadingOverlay) return; // Prevent error if loadingOverlay isn't ready
+            if (!loadingOverlay) return;
             if (show) {
                 loadingOverlay.classList.add('show');
             } else {
@@ -311,8 +311,8 @@
             currentCalorieDisplay = document.getElementById('currentCalorieDisplay');
             proteinLeftDisplay = document.getElementById('proteinLeftDisplay');
             caloriesLeftDisplay = document.getElementById('caloriesLeftDisplay');
-            proteinProgressBar = document.getElementById('proteinProgressBar');
-            calorieProgressBar = document.getElementById('calorieProgressBar');
+            proteinProgressBarFill = document.getElementById('proteinProgressBar');
+            calorieProgressBarFill = document.getElementById('calorieProgressBar');
             manualProteinInput = document.getElementById('manualProtein');
             manualCaloriesInput = document.getElementById('manualCalories');
             searchFoodNameInput = document.getElementById('searchFoodName');
@@ -321,17 +321,16 @@
             settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
             settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
             loadingOverlay = document.getElementById('loadingOverlay');
-            messageBox = document.getElementById('messageBox'); // Still get reference, but will not be actively shown.
+            messageBox = document.getElementById('messageBox');
 
             // Add event listeners here after elements are assigned
             document.getElementById('addManualFoodBtn').addEventListener('click', addManualFoodEntry);
             document.getElementById('searchFoodBtn').addEventListener('click', searchFoodAndAutoAddMacros);
             document.getElementById('openSettingsBtn').addEventListener('click', openSettingsModal);
             document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
-            // Attach event listener to modal overlay itself to close on outside click
             if (settingsModal) {
                 settingsModal.addEventListener('click', (e) => {
-                    if (e.target === settingsModal) { // Only close if clicking directly on the overlay
+                    if (e.target === settingsModal) {
                         closeSettingsModal();
                     }
                 });
@@ -341,72 +340,65 @@
             // Set UI ready flag *after* all elements are assigned
             isUiReady = true;
 
-            // --- Firebase Initialization for GitHub Pages ---
-            // On GitHub Pages, __app_id and __firebase_config are not provided by default.
-            // We'll use dummy values if they are undefined.
-            // Full Firebase functionality (data persistence) will require a backend
-            // to provide proper credentials, but the UI won't crash.
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-pages-default-app-id';
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-              apiKey: "AIzaSyBWfl0ygLwWAjLy1f-9hZa5w6CE66YY-40",
-              authDomain: "calorie-tracker-10dc5.firebaseapp.com",
-              projectId: "calorie-tracker-10dc5",
-              storageBucket: "calorie-tracker-10dc5.firebasestorage.app",
-              messagingSenderId: "980712360641",
-              appId: "1:980712360641:web:5ec3e7b33dcab547556240",
-              measurementId: "G-G59S80WVVD"
+            // --- Firebase Initialization with your provided config ---
+            // Your web app's Firebase configuration
+            // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+            const firebaseConfig = {
+                apiKey: "AIzaSyBWfl0ygLwWAjLy1f-9hZa5w6CE66YY-40",
+                authDomain: "calorie-tracker-10dc5.firebaseapp.com",
+                projectId: "calorie-tracker-10dc5",
+                storageBucket: "calorie-tracker-10dc5.firebasestorage.app",
+                messagingSenderId: "980712360641",
+                appId: "1:980712360641:web:5ec3e7b33dcab547556240",
+                measurementId: "G-G59S80WVVD"
             };
 
-            // Only initialize Firebase if we have a proper project ID (or if running in Canvas)
-            if (firebaseConfig.projectId && firebaseConfig.projectId !== "dummy-project-id" || typeof __app_id !== 'undefined') {
+            // Use the projectId from your actual firebaseConfig as appId for Firestore paths
+            const appId = firebaseConfig.projectId;
+
+            try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Authenticate user
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         console.log("Authenticated with user ID:", userId);
-                        // Start listening for data only after authentication
                         listenForGoals();
                         listenForFoodEntries();
                     } else {
                         try {
-                            // Sign in anonymously if no user is found
-                            // Only attempt to sign in with custom token if it's provided (Canvas environment)
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(auth, __initial_auth_token);
-                                console.log("Signed in with custom token.");
-                            } else {
-                                // Fallback for GitHub Pages or if token isn't present
-                                await signInAnonymously(auth);
-                                console.log("Signed in anonymously (GitHub Pages or no token).");
-                            }
+                            // On GitHub Pages, __initial_auth_token is not available, sign in anonymously.
+                            await signInAnonymously(auth);
+                            console.log("Signed in anonymously (GitHub Pages).");
                         } catch (error) {
-                            console.error("Firebase authentication error:", error);
+                            console.error("Firebase authentication error during anonymous sign-in:", error);
+                            // If anonymous sign-in fails, default UI state
+                            currentProteinGoal = 100;
+                            currentCalorieGoal = 2000;
+                            updateSummaryDisplay();
                         }
                     }
                 });
-            } else {
-                console.warn("Firebase is not fully configured. Data persistence will not work on this host.");
-                // Set initial UI values since Firestore won't be loading them, and explicitly update UI.
+            } catch (e) {
+                console.error("Firebase initialization failed with your provided config:", e);
+                console.warn("Data persistence will not work. Check your Firebase config and network connection.");
+                // Set initial UI values if Firebase init fails
                 currentProteinGoal = 100;
                 currentCalorieGoal = 2000;
-                updateSummaryDisplay(); // Call updateSummaryDisplay directly here for initial UI state
+                updateSummaryDisplay();
             }
         };
 
         // --- Firestore Listeners ---
 
-        // Listen for daily goals
         function listenForGoals() {
-            // Check if db is initialized before trying to use it
             if (!db) {
                 console.warn("Firestore db not initialized. Cannot listen for goals.");
                 return;
             }
-            const goalsDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/goals/daily`);
+            const goalsDocRef = doc(db, `artifacts/${appId}/users/${userId}/goals/daily`); // Use the appId defined globally
             onSnapshot(goalsDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -415,10 +407,9 @@
                     updateSummaryDisplay();
                     console.log("Goals updated:", data);
                 } else {
-                    // Set default goals if none exist
                     currentProteinGoal = 100;
                     currentCalorieGoal = 2000;
-                    if (db) { // Only attempt to set if db is initialized
+                    if (db) {
                         setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal })
                             .then(() => console.log("Default goals set."))
                             .catch(error => console.error("Error setting default goals:", error));
@@ -429,17 +420,15 @@
             });
         }
 
-        // Listen for daily food entries and calculate totals (reset at 3 AM UTC)
         function listenForFoodEntries() {
-            // Check if db is initialized before trying to use it
             if (!db) {
                 console.warn("Firestore db not initialized. Cannot listen for food entries.");
                 return;
             }
-            const foodEntriesCollectionRef = collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`);
+            const foodEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/foodEntries`); // Use the appId defined globally
 
             const startOfCalorieDay = getStartOfCalorieDayUTC();
-            const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1); // 24 hours minus 1 ms
+            const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1);
 
             const q = query(foodEntriesCollectionRef,
                 where("timestamp", ">=", startOfCalorieDay),
@@ -469,41 +458,31 @@
         // --- UI Update Functions ---
 
         function updateSummaryDisplay() {
-            // This is the key fix for "Progress bar fill element not found"
-            // Ensure UI elements are guaranteed to be ready before updating.
-            if (!isUiReady || !proteinProgressBar || !calorieProgressBar) {
-                console.warn("UI elements not ready for summary display update.");
+            if (!isUiReady || !proteinProgressBarFill || !calorieProgressBarFill) {
+                console.warn("UI elements (progress bars) not ready for summary display update.");
                 return;
             }
 
             proteinGoalDisplay.textContent = currentProteinGoal.toFixed(0);
             calorieGoalDisplay.textContent = currentCalorieGoal.toFixed(0);
 
-            // Calculate and display "left" values
             const proteinLeft = currentProteinGoal - totalProteinConsumed;
             const caloriesLeft = currentCalorieGoal - totalCaloriesConsumed;
 
             proteinLeftDisplay.textContent = proteinLeft.toFixed(0);
             caloriesLeftDisplay.textContent = caloriesLeft.toFixed(0);
 
-            updateProgressBar(proteinProgressBar, totalProteinConsumed, currentProteinGoal);
-            updateProgressBar(calorieProgressBar, totalCaloriesConsumed, currentCalorieGoal);
+            updateProgressBar(proteinProgressBarFill, totalProteinConsumed, currentProteinGoal);
+            updateProgressBar(calorieProgressBarFill, totalCaloriesConsumed, currentCalorieGoal);
         }
 
-        function updateProgressBar(progressBarElement, current, goal) {
-            // Ensure the element and its children exist before trying to manipulate them
-            if (!progressBarElement) {
-                console.warn("Progress bar element not found:", progressBarElement);
-                return;
-            }
-            const fillElement = progressBarElement.querySelector('.progress-bar-fill');
+        function updateProgressBar(fillElement, current, goal) {
             if (!fillElement) {
-                console.warn("Progress bar fill element not found inside:", progressBarElement);
+                console.warn("Progress bar fill element is null or undefined.");
                 return;
             }
 
             let percentage = (goal > 0) ? (current / goal) * 100 : 0;
-            // Cap at 100% for visual fill, but allow values over 100% to reflect in the UI text if needed
             const visualPercentage = Math.min(percentage, 100);
 
             fillElement.style.width = `${visualPercentage}%`;
@@ -511,7 +490,7 @@
             fillElement.classList.remove('warning', 'exceeded');
             if (current > goal) {
                 fillElement.classList.add('exceeded');
-            } else if (current > goal * 0.8) { // 80% of goal
+            } else if (current > goal * 0.8) {
                 fillElement.classList.add('warning');
             }
         }
@@ -528,22 +507,22 @@
             }
             if (!db) {
                 console.warn("Firestore db not initialized. Cannot add manual entry. Adding to local totals only.");
-                // Update local totals for immediate UI feedback even without persistence
                 totalProteinConsumed += protein;
                 totalCaloriesConsumed += calories;
                 updateSummaryDisplay();
                 manualProteinInput.value = '';
                 manualCaloriesInput.value = '';
-                return; // Exit after local update
+                return;
             }
 
             try {
                 showLoading(true);
-                await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
-                    name: 'Manual Entry', // Default name for manual entries
+                const currentAppId = appId; // Use the globally determined appId
+                await addDoc(collection(db, `artifacts/${currentAppId}/users/${userId}/foodEntries`), {
+                    name: 'Manual Entry',
                     protein: protein,
                     calories: calories,
-                    timestamp: serverTimestamp() // Use server timestamp
+                    timestamp: serverTimestamp()
                 });
                 manualProteinInput.value = '';
                 manualCaloriesInput.value = '';
@@ -556,7 +535,7 @@
 
         async function searchFoodAndAutoAddMacros() {
             const foodName = searchFoodNameInput.value.trim();
-            const quantity = parseFloat(searchFoodQuantityInput.value) || 1; // Default to 1 if not entered or invalid
+            const quantity = parseFloat(searchFoodQuantityInput.value) || 1;
 
             if (!foodName) {
                 console.error('Please enter a food name to search.');
@@ -566,7 +545,6 @@
                 console.error('Quantity must be a positive number.');
                 return;
             }
-            // Allow AI search even if db is not initialized, but don't save to Firestore.
             if (!db) {
                 console.warn("Firestore db not initialized. Cannot save search result. Performing AI search only for display.");
             }
@@ -574,7 +552,6 @@
             showLoading(true);
 
             try {
-                // Prepare the prompt for the LLM
                 const prompt = `Estimate the protein (in grams) and calories for '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "chicken breast", "protein": 31, "calories": 165 }`;
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
@@ -595,7 +572,7 @@
                     }
                 };
 
-                const apiKey = ""; // API key will be provided by the Canvas runtime
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
@@ -618,26 +595,24 @@
                     const parsedMacros = JSON.parse(jsonString);
 
                     if (parsedMacros.protein !== undefined && parsedMacros.calories !== undefined) {
-                        // Apply quantity
                         const finalProtein = parsedMacros.protein * quantity;
                         const finalCalories = parsedMacros.calories * quantity;
 
-                        // If DB is initialized, save to Firestore
                         if (db) {
-                            await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
-                                name: `${parsedMacros.foodName || foodName} (${quantity}x)`, // Use LLM's foodName + quantity, else user's input
+                            const currentAppId = appId; // Use the globally determined appId
+                            await addDoc(collection(db, `artifacts/${currentAppId}/users/${userId}/foodEntries`), {
+                                name: `${parsedMacros.foodName || foodName} (${quantity}x)`,
                                 protein: finalProtein,
                                 calories: finalCalories,
                                 timestamp: serverTimestamp()
                             });
                         } else {
-                            // If DB is not initialized, update local totals for immediate UI feedback
                             totalProteinConsumed += finalProtein;
                             totalCaloriesConsumed += finalCalories;
                             updateSummaryDisplay();
                         }
                         searchFoodNameInput.value = '';
-                        searchFoodQuantityInput.value = ''; // Clear quantity after adding
+                        searchFoodQuantityInput.value = '';
                     } else {
                         console.error('Could not get valid macro data from AI. Please try manual entry.');
                     }
@@ -675,16 +650,17 @@
                 currentCalorieGoal = newCalorieGoal;
                 updateSummaryDisplay();
                 settingsModal.classList.remove('open');
-                return; // Exit after local update
+                return;
             }
 
             try {
                 showLoading(true);
-                const goalsDocRef = doc(db, `artifacts/${__app_id}/users/${userId}/goals/daily`);
+                const currentAppId = appId; // Use the globally determined appId
+                const goalsDocRef = doc(db, `artifacts/${currentAppId}/users/${userId}/goals/daily`);
                 await setDoc(goalsDocRef, {
                     proteinGoal: newProteinGoal,
                     calorieGoal: newCalorieGoal
-                }, { merge: true }); // Use merge to only update specified fields
+                }, { merge: true });
                 settingsModal.classList.remove('open');
             } catch (e) {
                 console.error("Error saving goals: ", e);
@@ -705,7 +681,7 @@
                 <div>
                     <p class="text-gray-600 text-sm">Protein (g)</p>
                     <p class="text-xl font-semibold text-indigo-700"><span id="currentProteinDisplay">0</span> / <span id="proteinGoalDisplay">0</span></p>
-                    <div id="proteinProgressBarContainer" class="progress-bar-container"> <!-- Added a wrapper div with unique ID -->
+                    <div class="progress-bar-container">
                         <div id="proteinProgressBar" class="progress-bar-fill"></div>
                     </div>
                     <p class="text-gray-600 text-sm mt-2">Left: <span id="proteinLeftDisplay" class="font-semibold">0</span>g</p>
@@ -713,7 +689,7 @@
                 <div>
                     <p class="text-gray-600 text-sm">Calories</p>
                     <p class="text-xl font-semibold text-indigo-700"><span id="currentCalorieDisplay">0</span> / <span id="calorieGoalDisplay">0</span></p>
-                    <div id="calorieProgressBarContainer" class="progress-bar-container"> <!-- Added a wrapper div with unique ID -->
+                    <div class="progress-bar-container">
                         <div id="calorieProgressBar" class="progress-bar-fill"></div>
                     </div>
                     <p class="text-gray-600 text-sm mt-2">Left: <span id="caloriesLeftDisplay" class="font-semibold">0</span></p>
@@ -727,7 +703,7 @@
             <h2 class="section-title text-gray-800">Add Food</h2>
 
             <!-- Manual Entry -->
-            <div class="mb-6"> <!-- Added mb-6 for spacing between the two add sections -->
+            <div class="mb-6">
                 <h3 class="font-semibold text-gray-800 mb-2">Manually Add Macros</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                     <input type="number" id="manualProtein" placeholder="Protein (g)" class="col-span-2 sm:col-span-1">
@@ -742,7 +718,7 @@
                 <div class="search-input-group">
                     <input type="text" id="searchFoodName" placeholder="e.g., chicken breast, apple">
                     <input type="number" id="searchFoodQuantity" placeholder="Qty (e.g., 2)">
-                    <button id="searchFoodBtn">Add</button> <!-- Changed button text to "Add" -->
+                    <button id="searchFoodBtn">Add</button>
                 </div>
             </div>
         </div>
