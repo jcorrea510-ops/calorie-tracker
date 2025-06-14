@@ -278,11 +278,11 @@
         let caloriesLeftDisplay;
         let proteinProgressBarFill;
         let calorieProgressBarFill;
-        let manualCaloriesInput; // Changed order
-        let manualProteinInput;  // Changed order
-        let manualQuantityInput; // New quantity input for manual
+        let manualCaloriesInput;
+        let manualProteinInput;
+        let manualQuantityInput;
         let searchFoodNameInput;
-        let searchFoodQuantityInput;
+        // Removed searchFoodQuantityInput
         let settingsModal;
         let settingsProteinGoalInput;
         let settingsCalorieGoalInput;
@@ -333,7 +333,7 @@
             manualProteinInput = document.getElementById('manualProtein');
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
-            searchFoodQuantityInput = document.getElementById('searchFoodQuantity');
+            // Removed searchFoodQuantityInput assignment
             settingsModal = document.getElementById('settingsModal');
             settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
             settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
@@ -558,30 +558,27 @@
 
         async function searchFoodAndAutoAddMacros() {
             const foodName = searchFoodNameInput.value.trim();
-            const quantity = parseFloat(searchFoodQuantityInput.value) || 1;
+            // Removed quantity retrieval for search & auto-add
 
             if (!foodName) {
                 console.error('Please enter a food name to search.');
                 return;
             }
-            if (isNaN(quantity) || quantity <= 0) {
-                console.error('Quantity must be a positive number.');
-                return;
-            }
 
             // YOUR GOOGLE CLOUD API KEY FOR GEMINI API
-            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE"; // This is your provided key
+            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE";
 
-            if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") { // Check if DB is not initialized AND API Key is still default
+            if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") {
                 console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
-                return; // Prevent AI search if not configured
+                return;
             }
 
 
             showLoading(true);
 
             try {
-                const prompt = `Estimate the protein (in grams) and calories for '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "chicken breast", "protein": 31, "calories": 165 }`;
+                // Modified prompt to handle quantity in natural language
+                const prompt = `Estimate the total protein (in grams) and total calories for the following food item(s) as described: '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "four eggs with mozzarella cheese", "protein": 40, "calories": 500 }`;
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
 
@@ -592,7 +589,7 @@
                         responseSchema: {
                             type: "OBJECT",
                             properties: {
-                                "foodName": { "type": "STRING" },
+                                "foodName": { "type": "STRING" }, // AI should echo the food name
                                 "protein": { "type": "NUMBER" },
                                 "calories": { "type": "NUMBER" }
                             },
@@ -623,12 +620,13 @@
                     const parsedMacros = JSON.parse(jsonString);
 
                     if (parsedMacros.protein !== undefined && parsedMacros.calories !== undefined) {
-                        const finalProtein = parsedMacros.protein * quantity;
-                        const finalCalories = parsedMacros.calories * quantity;
+                        // Use AI's calculated totals directly, as it should account for quantity in the prompt
+                        const finalProtein = parsedMacros.protein;
+                        const finalCalories = parsedMacros.calories;
 
                         if (db) {
                             await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                                name: `${parsedMacros.foodName || foodName} (${quantity}x)`,
+                                name: parsedMacros.foodName || foodName, // Use AI's echo of food name
                                 protein: finalProtein,
                                 calories: finalCalories,
                                 timestamp: serverTimestamp()
@@ -639,7 +637,7 @@
                             updateSummaryDisplay();
                         }
                         searchFoodNameInput.value = '';
-                        searchFoodQuantityInput.value = '';
+                        // Removed searchFoodQuantityInput.value clear
                     } else {
                         console.error('Could not get valid macro data from AI. Please try manual entry.');
                     }
@@ -746,8 +744,9 @@
             <div>
                 <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
                 <div class="search-input-group">
-                    <input type="text" id="searchFoodName" placeholder="e.g., chicken breast, apple">
-                    <input type="number" id="searchFoodQuantity" placeholder="Qty (e.g., 2)">
+                    <!-- Updated placeholder for natural language input -->
+                    <input type="text" id="searchFoodName">
+                    <!-- Removed quantity input -->
                     <button id="searchFoodBtn">Add</button>
                 </div>
             </div>
