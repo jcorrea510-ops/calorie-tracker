@@ -7,6 +7,8 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Meta tag for theme color for mobile browsers -->
+    <meta name="theme-color" content="#1a202c">
     <style>
         /* Dark Mode Styles - Deep, consistent dark theme */
         body {
@@ -236,6 +238,18 @@
             width: 100%; /* All items in the group take full width */
             flex-shrink: 0; /* Prevent shrinking */
         }
+
+        /* Manual entry specific grid adjustments */
+        .manual-entry-grid {
+            display: grid;
+            grid-template-columns: 1fr; /* Stack on small screens */
+            gap: 0.75rem;
+        }
+        @media (min-width: 640px) {
+            .manual-entry-grid {
+                grid-template-columns: 1fr 1fr 0.5fr; /* Calories, Protein, Quantity on larger screens */
+            }
+        }
     </style>
     <!-- Firebase SDK CDN -->
     <script type="module">
@@ -264,8 +278,9 @@
         let caloriesLeftDisplay;
         let proteinProgressBarFill;
         let calorieProgressBarFill;
-        let manualProteinInput;
-        let manualCaloriesInput;
+        let manualCaloriesInput; // Changed order
+        let manualProteinInput;  // Changed order
+        let manualQuantityInput; // New quantity input for manual
         let searchFoodNameInput;
         let searchFoodQuantityInput;
         let settingsModal;
@@ -314,8 +329,9 @@
             caloriesLeftDisplay = document.getElementById('caloriesLeftDisplay');
             proteinProgressBarFill = document.getElementById('proteinProgressBar');
             calorieProgressBarFill = document.getElementById('calorieProgressBar');
-            manualProteinInput = document.getElementById('manualProtein');
-            manualCaloriesInput = document.getElementById('manualCalories');
+            manualCaloriesInput = document.getElementById('manualCalories'); // Changed order
+            manualProteinInput = document.getElementById('manualProtein');    // Changed order
+            manualQuantityInput = document.getElementById('manualQuantity'); // New
             searchFoodNameInput = document.getElementById('searchFoodName');
             searchFoodQuantityInput = document.getElementById('searchFoodQuantity');
             settingsModal = document.getElementById('settingsModal');
@@ -378,7 +394,7 @@
                             currentProteinGoal = 100;
                             currentCalorieGoal = 2000;
                             updateSummaryDisplay();
-                            console.warn("Data persistence will not work due to authentication error. Check Firebase project settings.");
+                            console.warn("Data persistence will not work due to authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
                         }
                     }
                 });
@@ -395,7 +411,7 @@
         // --- Firestore Listeners ---
 
         function listenForGoals() {
-            if (!db || !appId || !userId) { // Added appId and userId checks
+            if (!db || !appId || !userId) {
                 console.warn("Firestore db, appId, or userId not initialized. Cannot listen for goals.");
                 return;
             }
@@ -422,7 +438,7 @@
         }
 
         function listenForFoodEntries() {
-            if (!db || !appId || !userId) { // Added appId and userId checks
+            if (!db || !appId || !userId) {
                 console.warn("Firestore db, appId, or userId not initialized. Cannot listen for food entries.");
                 return;
             }
@@ -499,33 +515,40 @@
         // --- Event Handlers ---
 
         async function addManualFoodEntry() {
-            const protein = parseFloat(manualProteinInput.value);
-            const calories = parseFloat(manualCaloriesInput.value);
+            const calories = parseFloat(manualCaloriesInput.value); // Changed order
+            const protein = parseFloat(manualProteinInput.value);   // Changed order
+            const quantity = parseFloat(manualQuantityInput.value) || 1; // Get quantity, default to 1
 
-            if (isNaN(protein) || isNaN(calories) || protein < 0 || calories < 0) {
-                console.error('Invalid input for manual entry.');
+            if (isNaN(calories) || isNaN(protein) || isNaN(quantity) || calories < 0 || protein < 0 || quantity <= 0) {
+                console.error('Please enter valid positive numbers for calories, protein, and quantity.');
                 return;
             }
+
+            const finalCalories = calories * quantity;
+            const finalProtein = protein * quantity;
+
             if (!db || !appId || !userId) {
                 console.warn("Firestore db, appId, or userId not initialized. Cannot add manual entry. Adding to local totals only.");
-                totalProteinConsumed += protein;
-                totalCaloriesConsumed += calories;
+                totalProteinConsumed += finalProtein;
+                totalCaloriesConsumed += finalCalories;
                 updateSummaryDisplay();
-                manualProteinInput.value = '';
                 manualCaloriesInput.value = '';
+                manualProteinInput.value = '';
+                manualQuantityInput.value = ''; // Clear quantity
                 return;
             }
 
             try {
                 showLoading(true);
                 await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                    name: 'Manual Entry',
-                    protein: protein,
-                    calories: calories,
+                    name: `Manual Entry (${quantity}x)`, // Indicate quantity in name
+                    protein: finalProtein,
+                    calories: finalCalories,
                     timestamp: serverTimestamp()
                 });
-                manualProteinInput.value = '';
                 manualCaloriesInput.value = '';
+                manualProteinInput.value = '';
+                manualQuantityInput.value = ''; // Clear quantity
             } catch (e) {
                 console.error("Error adding document: ", e);
             } finally {
@@ -545,8 +568,16 @@
                 console.error('Quantity must be a positive number.');
                 return;
             }
-            if (!db || !appId || !userId) {
-                console.warn("Firestore db, appId, or userId not initialized. Cannot save search result. Performing AI search only for display.");
+
+            // *** IMPORTANT: For AI Search to work on GitHub Pages, you need a Google Cloud API Key
+            // *** that is enabled for the Gemini API. Replace "YOUR_GOOGLE_CLOUD_API_KEY_HERE"
+            // *** with your actual key from Google Cloud Console (APIs & Services > Credentials).
+            // *** Keep the API key empty if testing only in the Canvas environment.
+            const apiKey = "YOUR_GOOGLE_CLOUD_API_KEY_HERE"; // <<<--- REPLACE WITH YOUR ACTUAL GOOGLE CLOUD API KEY FOR EXTERNAL DEPLOYMENT
+
+            if (!db && apiKey === "YOUR_GOOGLE_CLOUD_API_KEY_HERE") { // Check if DB is not initialized AND API Key is still default
+                console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
+                return; // Prevent AI search if not configured
             }
 
             showLoading(true);
@@ -572,7 +603,7 @@
                     }
                 };
 
-                const apiKey = "";
+                // Use the API key here
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
@@ -643,7 +674,7 @@
                 console.error('Please enter valid positive numbers for goals.');
                 return;
             }
-            if (!db || !appId || !userId) { // Added appId and userId checks
+            if (!db || !appId || !userId) {
                 console.warn("Firestore db, appId, or userId not initialized. Cannot save settings. Updating local goals only.");
                 currentProteinGoal = newProteinGoal;
                 currentCalorieGoal = newCalorieGoal;
@@ -703,9 +734,13 @@
             <!-- Manual Entry -->
             <div class="mb-6">
                 <h3 class="font-semibold text-gray-800 mb-2">Manually Add Macros</h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                    <input type="number" id="manualProtein" placeholder="Protein (g)" class="col-span-2 sm:col-span-1">
-                    <input type="number" id="manualCalories" placeholder="Calories" class="col-span-2 sm:col-span-1">
+                <div class="manual-entry-grid mb-3">
+                    <!-- Calories first -->
+                    <input type="number" id="manualCalories" placeholder="Calories">
+                    <!-- Then Protein -->
+                    <input type="number" id="manualProtein" placeholder="Protein (g)">
+                    <!-- New Quantity for Manual Entry -->
+                    <input type="number" id="manualQuantity" placeholder="Qty (e.g., 1)" value="1">
                 </div>
                 <button id="addManualFoodBtn" class="w-full">Add Manual Entry</button>
             </div>
