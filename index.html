@@ -338,12 +338,12 @@
             }
             document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
 
-            // Set UI ready flag
+            // Set UI ready flag *after* all elements are assigned
             isUiReady = true;
 
             // --- Firebase Initialization for GitHub Pages ---
             // On GitHub Pages, __app_id and __firebase_config are not provided by default.
-            // We'll use dummy values to prevent JavaScript errors if they're undefined.
+            // We'll use dummy values if they are undefined.
             // Full Firebase functionality (data persistence) will require a backend
             // to provide proper credentials, but the UI won't crash.
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'github-pages-default-app-id';
@@ -373,12 +373,14 @@
                     } else {
                         try {
                             // Sign in anonymously if no user is found
+                            // Only attempt to sign in with custom token if it's provided (Canvas environment)
                             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                                 await signInWithCustomToken(auth, __initial_auth_token);
                                 console.log("Signed in with custom token.");
                             } else {
+                                // Fallback for GitHub Pages or if token isn't present
                                 await signInAnonymously(auth);
-                                console.log("Signed in anonymously.");
+                                console.log("Signed in anonymously (GitHub Pages or no token).");
                             }
                         } catch (error) {
                             console.error("Firebase authentication error:", error);
@@ -387,10 +389,10 @@
                 });
             } else {
                 console.warn("Firebase is not fully configured. Data persistence will not work on this host.");
-                // Set initial UI values since Firestore won't be loading them
+                // Set initial UI values since Firestore won't be loading them, and explicitly update UI.
                 currentProteinGoal = 100;
                 currentCalorieGoal = 2000;
-                updateSummaryDisplay();
+                updateSummaryDisplay(); // Call updateSummaryDisplay directly here for initial UI state
             }
         };
 
@@ -466,7 +468,12 @@
         // --- UI Update Functions ---
 
         function updateSummaryDisplay() {
-            if (!isUiReady) return; // Only update UI if elements are guaranteed to be ready
+            // This is the key fix for "Progress bar fill element not found"
+            // Ensure UI elements are guaranteed to be ready before updating.
+            if (!isUiReady || !proteinProgressBar || !calorieProgressBar) {
+                console.warn("UI elements not ready for summary display update.");
+                return;
+            }
 
             proteinGoalDisplay.textContent = currentProteinGoal.toFixed(0);
             calorieGoalDisplay.textContent = currentCalorieGoal.toFixed(0);
@@ -519,8 +526,14 @@
                 return;
             }
             if (!db) {
-                console.warn("Firestore db not initialized. Cannot add manual entry.");
-                return;
+                console.warn("Firestore db not initialized. Cannot add manual entry. Adding to local totals only.");
+                // Update local totals for immediate UI feedback even without persistence
+                totalProteinConsumed += protein;
+                totalCaloriesConsumed += calories;
+                updateSummaryDisplay();
+                manualProteinInput.value = '';
+                manualCaloriesInput.value = '';
+                return; // Exit after local update
             }
 
             try {
@@ -552,9 +565,9 @@
                 console.error('Quantity must be a positive number.');
                 return;
             }
+            // Allow AI search even if db is not initialized, but don't save to Firestore.
             if (!db) {
-                console.warn("Firestore db not initialized. Cannot search and add macros.");
-                return;
+                console.warn("Firestore db not initialized. Cannot save search result. Performing AI search only for display.");
             }
 
             showLoading(true);
@@ -609,13 +622,20 @@
                         const finalProtein = parsedMacros.protein * quantity;
                         const finalCalories = parsedMacros.calories * quantity;
 
-                        // Add to Firestore
-                        await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
-                            name: `${parsedMacros.foodName || foodName} (${quantity}x)`, // Use LLM's foodName + quantity, else user's input
-                            protein: finalProtein,
-                            calories: finalCalories,
-                            timestamp: serverTimestamp()
-                        });
+                        // If DB is initialized, save to Firestore
+                        if (db) {
+                            await addDoc(collection(db, `artifacts/${__app_id}/users/${userId}/foodEntries`), {
+                                name: `${parsedMacros.foodName || foodName} (${quantity}x)`, // Use LLM's foodName + quantity, else user's input
+                                protein: finalProtein,
+                                calories: finalCalories,
+                                timestamp: serverTimestamp()
+                            });
+                        } else {
+                            // If DB is not initialized, update local totals for immediate UI feedback
+                            totalProteinConsumed += finalProtein;
+                            totalCaloriesConsumed += finalCalories;
+                            updateSummaryDisplay();
+                        }
                         searchFoodNameInput.value = '';
                         searchFoodQuantityInput.value = ''; // Clear quantity after adding
                     } else {
@@ -650,8 +670,12 @@
                 return;
             }
             if (!db) {
-                console.warn("Firestore db not initialized. Cannot save settings.");
-                return;
+                console.warn("Firestore db not initialized. Cannot save settings. Updating local goals only.");
+                currentProteinGoal = newProteinGoal;
+                currentCalorieGoal = newCalorieGoal;
+                updateSummaryDisplay();
+                settingsModal.classList.remove('open');
+                return; // Exit after local update
             }
 
             try {
