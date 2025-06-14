@@ -317,6 +317,41 @@
             return startOfToday3AMUTC;
         }
 
+        // Function to get the next 3 AM UTC (for scheduling the daily reset)
+        function getNext3AMUTC() {
+            const now = new Date();
+            const year = now.getUTCFullYear();
+            const month = now.getUTCMonth();
+            const date = now.getUTCDate();
+
+            let next3AMUTC = new Date(Date.UTC(year, month, date, 3, 0, 0, 0));
+
+            // If current time is past or exactly 3 AM UTC, set for tomorrow's 3 AM UTC
+            if (now.getUTCHours() >= 3) {
+                next3AMUTC.setUTCDate(next3AMUTC.getUTCDate() + 1);
+            }
+            return next3AMUTC;
+        }
+
+        // Function to schedule the daily reset
+        function scheduleDailyReset() {
+            const nextResetTime = getNext3AMUTC();
+            const timeUntilReset = nextResetTime.getTime() - new Date().getTime();
+
+            console.log(`Scheduling daily reset for: ${nextResetTime.toISOString()} (in ${timeUntilReset / 1000 / 60} minutes)`);
+
+            setTimeout(() => {
+                console.log("Daily reset triggered!");
+                // Force reset totals and update UI
+                totalProteinConsumed = 0;
+                totalCaloriesConsumed = 0;
+                updateSummaryDisplay();
+                // Re-call listenForFoodEntries to re-subscribe with the new day's query range
+                listenForFoodEntries(); // This will fetch current day's (new day's) entries
+                scheduleDailyReset(); // Schedule the next reset
+            }, timeUntilReset);
+        }
+
 
         // Initialize Firebase and UI elements
         window.onload = async () => {
@@ -333,7 +368,6 @@
             manualProteinInput = document.getElementById('manualProtein');
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
-            // Removed searchFoodQuantityInput assignment
             settingsModal = document.getElementById('settingsModal');
             settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
             settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
@@ -383,6 +417,7 @@
                         console.log("Authenticated with user ID:", userId);
                         listenForGoals();
                         listenForFoodEntries();
+                        scheduleDailyReset(); // Schedule the first daily reset after authentication
                     } else {
                         try {
                             // On GitHub Pages, __initial_auth_token is not available, sign in anonymously.
@@ -516,13 +551,16 @@
 
         async function addManualFoodEntry() {
             const calories = parseFloat(manualCaloriesInput.value);
-            const protein = parseFloat(manualProteinInput.value);
+            // Allow protein to be 0 if blank or invalid
+            const protein = parseFloat(manualProteinInput.value) || 0;
             const quantity = parseFloat(manualQuantityInput.value) || 1;
 
-            if (isNaN(calories) || isNaN(protein) || isNaN(quantity) || calories < 0 || protein < 0 || quantity <= 0) {
-                console.error('Please enter valid positive numbers for calories, protein, and quantity.');
+            // Validate essential inputs
+            if (isNaN(calories) || calories < 0 || isNaN(quantity) || quantity <= 0) {
+                console.error('Please enter valid positive numbers for calories and quantity.');
                 return;
             }
+            // Protein is already handled to be 0 if blank, so no separate NaN check needed for it here.
 
             const finalCalories = calories * quantity;
             const finalProtein = protein * quantity;
@@ -558,7 +596,6 @@
 
         async function searchFoodAndAutoAddMacros() {
             const foodName = searchFoodNameInput.value.trim();
-            // Removed quantity retrieval for search & auto-add
 
             if (!foodName) {
                 console.error('Please enter a food name to search.');
@@ -637,7 +674,6 @@
                             updateSummaryDisplay();
                         }
                         searchFoodNameInput.value = '';
-                        // Removed searchFoodQuantityInput.value clear
                     } else {
                         console.error('Could not get valid macro data from AI. Please try manual entry.');
                     }
@@ -745,7 +781,7 @@
                 <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
                 <div class="search-input-group">
                     <!-- Updated placeholder for natural language input -->
-                    <input type="text" id="searchFoodName">
+                    <input type="text" id="searchFoodName" placeholder="e.g., four eggs with mozzarella cheese">
                     <!-- Removed quantity input -->
                     <button id="searchFoodBtn">Add</button>
                 </div>
