@@ -419,7 +419,6 @@
                         console.log("Authenticated with user ID:", userId);
                         listenForGoals();
                         listenForFoodEntries();
-                        // Removed: scheduleDailyReset(); // No longer auto-resets
                     } else {
                         try {
                             await signInAnonymously(auth);
@@ -773,8 +772,17 @@
         <div class="bg-gray-50 p-6 rounded-2xl shadow-md">
             <h2 class="section-title text-gray-800">Add Food</h2>
 
-            <!-- Manual Entry -->
-            <div class="mb-6">
+            <!-- Search Food (AI Powered) - Moved to the top within Add Food section -->
+            <div>
+                <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
+                <div class="search-input-group mb-6"> <!-- Added mb-6 for spacing -->
+                    <input type="text" id="searchFoodName" placeholder="Search">
+                    <button id="searchFoodBtn">Add</button>
+                </div>
+            </div>
+
+            <!-- Manual Entry - Now below Search -->
+            <div>
                 <h3 class="font-semibold text-gray-800 mb-2">Manually Add Macros</h3>
                 <div class="manual-entry-grid mb-3">
                     <!-- Calories first -->
@@ -785,17 +793,6 @@
                     <input type="number" id="manualQuantity" placeholder="Qty (e.g., 1)" value="1">
                 </div>
                 <button id="addManualFoodBtn" class="w-full">Add Manual Entry</button>
-            </div>
-
-            <!-- Search Food (AI Powered) -->
-            <div>
-                <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
-                <div class="search-input-group">
-                    <!-- Updated placeholder for natural language input -->
-                    <input type="text" id="searchFoodName" placeholder="e.g., four eggs with mozzarella cheese">
-                    <!-- Removed quantity input -->
-                    <button id="searchFoodBtn">Add</button>
-                </div>
             </div>
         </div>
     </div>
