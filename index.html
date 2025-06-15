@@ -317,42 +317,6 @@
             return startOfToday3AMUTC;
         }
 
-        // Function to get the next 3 AM UTC (for scheduling the daily reset)
-        function getNext3AMUTC() {
-            const now = new Date();
-            const year = now.getUTCFullYear();
-            const month = now.getUTCMonth();
-            const date = now.getUTCDate();
-
-            let next3AMUTC = new Date(Date.UTC(year, month, date, 3, 0, 0, 0));
-
-            // If current time is past or exactly 3 AM UTC, set for tomorrow's 3 AM UTC
-            if (now.getUTCHours() >= 3) {
-                next3AMUTC.setUTCDate(next3AMUTC.getUTCDate() + 1);
-            }
-            return next3AMUTC;
-        }
-
-        // Function to schedule the daily reset
-        function scheduleDailyReset() {
-            const nextResetTime = getNext3AMUTC();
-            const timeUntilReset = nextResetTime.getTime() - new Date().getTime();
-
-            console.log(`Scheduling daily reset for: ${nextResetTime.toISOString()} (in ${timeUntilReset / 1000 / 60} minutes)`);
-
-            setTimeout(async () => {
-                console.log("Daily reset triggered!");
-                // Clear all entries from Firestore for the day that just ended
-                await resetDailyTotalsInFirestore(); // This will clear the previous day's data
-
-                // Re-establish the food entries listener for the new day
-                // This will automatically set totals to 0 if no entries exist for the new day
-                listenForFoodEntries();
-
-                scheduleDailyReset(); // Schedule the next reset
-            }, timeUntilReset);
-        }
-
         // Function to reset daily totals by deleting records in Firestore
         async function resetDailyTotalsInFirestore() {
             if (!db || !appId || !userId) {
@@ -455,15 +419,13 @@
                         console.log("Authenticated with user ID:", userId);
                         listenForGoals();
                         listenForFoodEntries();
-                        scheduleDailyReset(); // Schedule the first daily reset after authentication
+                        // Removed: scheduleDailyReset(); // No longer auto-resets
                     } else {
                         try {
-                            // On GitHub Pages, __initial_auth_token is not available, sign in anonymously.
                             await signInAnonymously(auth);
                             console.log("Signed in anonymously (GitHub Pages).");
                         } catch (error) {
                             console.error("Firebase authentication error during anonymous sign-in:", error);
-                            // If anonymous sign-in fails, default UI state and warn about persistence
                             currentProteinGoal = 100;
                             currentCalorieGoal = 2000;
                             updateSummaryDisplay();
@@ -474,7 +436,6 @@
             } catch (e) {
                 console.error("Firebase initialization failed with your provided config:", e);
                 console.warn("Data persistence will not work. Check your Firebase config and network connection.");
-                // Set initial UI values if Firebase init fails
                 currentProteinGoal = 100;
                 currentCalorieGoal = 2000;
                 updateSummaryDisplay();
@@ -595,20 +556,22 @@
         // --- Event Handlers ---
 
         async function addManualFoodEntry() {
-            // Treat empty string for calories as 0, otherwise parse.
-            const calories = manualCaloriesInput.value === '' ? 0 : parseFloat(manualCaloriesInput.value);
-            // Treat empty string for protein as 0, otherwise parse.
-            const protein = manualProteinInput.value === '' ? 0 : parseFloat(manualProteinInput.value);
-            // Treat empty string for quantity as 1, otherwise parse.
-            const quantity = manualQuantityInput.value === '' ? 1 : parseFloat(manualQuantityInput.value);
+            // Use parseFloat directly on value; if empty string, it becomes NaN, then || 0/1 handles it.
+            const calories = parseFloat(manualCaloriesInput.value) || 0;
+            const protein = parseFloat(manualProteinInput.value) || 0; // Defaults to 0 if blank or invalid
+            const quantity = parseFloat(manualQuantityInput.value) || 1; // Defaults to 1 if blank or invalid
 
-            // Now validate the parsed numbers
-            if (isNaN(calories) || calories < 0 ||
-                isNaN(protein) || protein < 0 || // Still validate protein if explicitly entered
-                isNaN(quantity) || quantity <= 0) {
-                console.error('Please enter valid positive numbers for calories, protein (or leave blank), and quantity (must be greater than zero).');
-                return;
+            // Validate specifically for values that MUST be positive
+            if (isNaN(calories) || calories < 0 || isNaN(quantity) || quantity <= 0) {
+                 console.error('Validation Error: Calories must be a non-negative number. Quantity must be a positive number.');
+                 return;
             }
+            // Protein can be 0 or positive, so only check for negative if it's explicitly parsed as such
+            if (isNaN(protein) || protein < 0) {
+                 console.error('Validation Error: Protein must be a non-negative number.');
+                 return;
+            }
+
 
             const finalCalories = calories * quantity;
             const finalProtein = protein * quantity;
