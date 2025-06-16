@@ -719,7 +719,8 @@
             showLoading(true);
 
             try {
-                const prompt = `Estimate the total protein (in grams) and total calories for the following food item(s) as described: '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "four eggs with mozzarella cheese", "protein": 40, "calories": 500 }`;
+                // Modified prompt to emphasize precise calculation based on nutritional databases
+                const prompt = `As an expert nutritionist with access to comprehensive and up-to-date nutritional databases, precisely calculate the total protein (in grams) and total calories for the following food item(s) as described: '${foodName}'. Focus on accurate, detailed calculations based on standard nutritional values. If exact data for a specific component is not available, use the most common or closest substitute. Provide the response in JSON format. If a calculation is genuinely impossible or illogical, return 0 for the respective value. Example: { "foodName": "four eggs with mozzarella cheese", "protein": 40, "calories": 500 }`;
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
 
