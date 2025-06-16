@@ -231,12 +231,19 @@
             box-sizing: border-box; /* Include padding and border in the element's total width */
             align-items: stretch; /* Make children stretch to fill container height */
         }
-        /* No specific @media (min-width: 640px) rule for flex-direction: row here, so it stays column */
-        .search-input-group input[type="text"],
-        .search-input-group input[type="number"],
-        .search-input-group button {
-            width: 100%; /* All items in the group take full width */
-            flex-shrink: 0; /* Prevent shrinking */
+        /* Media query for wider screens to arrange inputs in a row */
+        @media (min-width: 640px) {
+            .search-input-group-row {
+                flex-direction: row; /* Arrange children in a row */
+                align-items: center; /* Vertically align items */
+            }
+            .search-input-group-row input[type="text"] {
+                flex-grow: 2; /* Allow text input to take more space */
+            }
+            .search-input-group-row input[type="number"] {
+                flex-grow: 0.5; /* Quantity input can be smaller */
+                max-width: 80px; /* Constrain width for quantity */
+            }
         }
 
         /* Manual entry specific grid adjustments */
@@ -287,6 +294,13 @@
         let unsubscribeFoodListener = null; // To hold the unsubscribe function for food entries listener
         let unsubscribeCardioListener = null; // New: To hold the unsubscribe function for cardio entries listener
 
+        // Nutritionix API Keys (REPLACE WITH YOUR OWN!)
+        // WARNING: Directly exposing API keys in client-side code is NOT secure for production.
+        // For public/production apps, consider using a backend proxy server to protect your keys.
+        const NUTRITIONIX_APP_ID = "75b7c31e"; // User's provided App ID
+        const NUTRITIONIX_APP_KEY = "6d62a69715291408ea8bcb6815272fd1"; // User's provided App Key
+
+
         // UI Elements (declared globally, assigned in window.onload)
         let proteinGoalDisplay;
         let calorieGoalDisplay;
@@ -300,6 +314,7 @@
         let manualProteinInput;
         let manualQuantityInput;
         let searchFoodNameInput;
+        let searchFoodQuantityInput; // New: Quantity input for food search
         // New Cardio UI Elements
         let currentDistanceDisplay;
         let currentCaloriesBurnedDisplay;
@@ -408,6 +423,7 @@
             manualProteinInput = document.getElementById('manualProtein');
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
+            searchFoodQuantityInput = document.getElementById('searchFoodQuantity'); // New: Assign search food quantity
             // New Cardio UI Elements assignments
             currentDistanceDisplay = document.getElementById('currentDistanceDisplay');
             currentCaloriesBurnedDisplay = document.getElementById('currentCaloriesBurnedDisplay');
@@ -481,7 +497,7 @@
                             currentCalorieGoal = 2000;
                             currentWeight = 150; // Default weight if auth fails
                             updateSummaryDisplay();
-                            console.warn("Data persistence will not work due to authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
+                            console.warn("Data persistence will not work due => authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
                         }
                     }
                 });
@@ -701,91 +717,68 @@
 
         async function searchFoodAndAutoAddMacros() {
             const foodName = searchFoodNameInput.value.trim();
+            const quantity = parseFloat(searchFoodQuantityInput.value) || 1; // Get quantity for search food
 
             if (!foodName) {
                 console.error('Please enter a food name to search.');
                 return;
             }
-
-            // YOUR GOOGLE CLOUD API KEY FOR GEMINI API
-            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE";
-
-            if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") {
-                console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
+            if (isNaN(quantity) || quantity <= 0) {
+                console.error('Quantity must be a positive number.');
                 return;
             }
 
+            if (NUTRITIONIX_APP_ID === "YOUR_NUTRITIONIX_APP_ID" || NUTRITIONIX_APP_KEY === "YOUR_NUTRITIONIX_APP_KEY") {
+                console.error("Nutritionix API keys are not configured. Please get your keys from developer.nutritionix.com and replace the placeholders in the code.");
+                return;
+            }
 
             showLoading(true);
 
             try {
-                // Modified prompt to emphasize precise calculation based on nutritional databases
-                const prompt = `As an expert nutritionist with access to comprehensive and up-to-date nutritional databases, precisely calculate the total protein (in grams) and total calories for the following food item(s) as described: '${foodName}'. Focus on accurate, detailed calculations based on standard nutritional values. If exact data for a specific component is not available, use the most common or closest substitute. Provide the response in JSON format. If a calculation is genuinely impossible or illogical, return 0 for the respective value. Example: { "foodName": "four eggs with mozzarella cheese", "protein": 40, "calories": 500 }`;
-                let chatHistory = [];
-                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-                const payload = {
-                    contents: chatHistory,
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "OBJECT",
-                            properties: {
-                                "foodName": { "type": "STRING" },
-                                "protein": { "type": "NUMBER" },
-                                "calories": { "type": "NUMBER" }
-                            },
-                            required: ["foodName", "protein", "calories"]
-                        }
-                    }
-                };
-
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-                const response = await fetch(apiUrl, {
+                const response = await fetch('https://trackapi.nutritionix.com/v2/natural/nutrients', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-app-id': NUTRITIONIX_APP_ID,
+                        'x-app-key': NUTRITIONIX_APP_KEY
+                    },
+                    body: JSON.stringify({ query: foodName })
                 });
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
+                    throw new Error(`Nutritionix API error: ${response.status} ${response.statusText} - ${errorData.message || JSON.stringify(errorData)}`);
                 }
 
-                const result = await response.json();
+                const data = await response.json();
+                console.log("Nutritionix response:", data);
 
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    const jsonString = result.candidates[0].content.parts[0].text;
-                    const parsedMacros = JSON.parse(jsonString);
+                if (data.foods && data.foods.length > 0) {
+                    const firstFood = data.foods[0];
+                    const protein = (firstFood.nf_protein || 0) * quantity; // Apply quantity
+                    const calories = (firstFood.nf_calories || 0) * quantity; // Apply quantity
+                    const foodDescription = `${foodName} (${quantity}x)`; // Update description to show quantity
 
-                    if (parsedMacros.protein !== undefined && parsedMacros.calories !== undefined) {
-                        const finalProtein = parsedMacros.protein;
-                        const finalCalories = parsedMacros.calories;
-
-                        if (db) {
-                            await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                                name: parsedMacros.foodName || foodName,
-                                protein: finalProtein,
-                                calories: finalCalories,
-                                timestamp: serverTimestamp()
-                            });
-                        } else {
-                            totalProteinConsumed += finalProtein;
-                            totalCaloriesConsumed += finalCalories;
-                            updateSummaryDisplay();
-                        }
-                        searchFoodNameInput.value = '';
+                    if (db) {
+                        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
+                            name: foodDescription,
+                            protein: protein,
+                            calories: calories,
+                            timestamp: serverTimestamp()
+                        });
                     } else {
-                        console.error('Could not get valid macro data from AI. Please try manual entry.');
+                        totalProteinConsumed += protein;
+                        totalCaloriesConsumed += calories;
+                        updateSummaryDisplay();
                     }
+                    searchFoodNameInput.value = '';
+                    searchFoodQuantityInput.value = '1'; // Reset quantity to 1
                 } else {
-                    console.error('AI could not find macros for this food. Try manual entry.');
+                    console.error('No food items found for your search. Try a different query or manual entry.');
                 }
             } catch (error) {
-                console.error("Error searching food with AI:", error);
+                console.error("Error searching food with Nutritionix:", error);
             } finally {
                 showLoading(false);
             }
@@ -837,7 +830,8 @@
                 return;
             }
 
-            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE";
+            // YOUR GOOGLE CLOUD API KEY FOR GEMINI API
+            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE"; // Replace with your actual Gemini API Key if you have one.
 
             if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") {
                 console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
@@ -1018,11 +1012,12 @@
             <!-- Add Food Box -->
             <div class="sub-section-card">
                 <h2 class="section-title text-gray-800">Add Food</h2>
-                <!-- Search Food (AI Powered) -->
+                <!-- Search Food (Nutritionix Powered) -->
                 <div class="mb-6">
                     <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Food Macros</h3>
-                    <div class="search-input-group">
-                        <input type="text" id="searchFoodName" placeholder="Search">
+                    <div class="search-input-group search-input-group-row">
+                        <input type="text" id="searchFoodName" placeholder="Search Food (e.g., 3.8 eggs with 56g mozzarella)">
+                        <input type="number" id="searchFoodQuantity" placeholder="Qty" value="1" min="0.1" step="0.1">
                         <button id="searchFoodBtn">Add Food</button>
                     </div>
                 </div>
@@ -1042,7 +1037,7 @@
             <!-- Add Cardio Box -->
             <div class="sub-section-card">
                 <h2 class="section-title text-gray-800">Add Cardio</h2>
-                <!-- Search & Auto-Add Cardio -->
+                <!-- Search & Auto-Add Cardio (AI Powered) -->
                 <div class="mb-6">
                     <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Cardio</h3>
                     <div class="search-input-group">
