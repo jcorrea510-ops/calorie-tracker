@@ -80,11 +80,11 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Smaller shadow on click */
         }
         /* Primary button */
-        #addManualFoodBtn, #searchFoodBtn, #saveSettingsBtn {
+        #addManualFoodBtn, #searchFoodBtn, #saveSettingsBtn, #addManualCardioBtn, #searchCardioBtn {
             background-color: #667eea; /* Vibrant Indigo primary button */
             color: white;
         }
-        #addManualFoodBtn:hover, #searchFoodBtn:hover, #saveSettingsBtn:hover {
+        #addManualFoodBtn:hover, #searchFoodBtn:hover, #saveSettingsBtn:hover, #addManualCardioBtn:hover, #searchCardioBtn:hover {
             background-color: #5a67d8; /* Darker indigo on hover */
         }
         /* Secondary button (Set Goals) */
@@ -250,6 +250,18 @@
                 grid-template-columns: 1fr 1fr 0.5fr; /* Calories, Protein, Quantity on larger screens */
             }
         }
+        /* New styles for the sub-sections within "Add Data" */
+        .sub-section-card {
+            background-color: #3b4558; /* Same as the main "Add Data" div for consistency */
+            border-radius: 1rem; /* Slightly smaller border-radius than parent */
+            padding: 1.25rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); /* Deeper shadow for distinction */
+            margin-bottom: 1.5rem; /* Space between sub-sections */
+        }
+        /* Remove bottom margin from the last sub-section card */
+        .sub-section-card:last-child {
+            margin-bottom: 0;
+        }
     </style>
     <!-- Firebase SDK CDN -->
     <script type="module">
@@ -265,10 +277,15 @@
         let appId; // Now declared globally
         let currentProteinGoal = 0;
         let currentCalorieGoal = 0;
+        let currentWeight = 0; // New: User's weight
         let totalProteinConsumed = 0; // Track total protein consumed
         let totalCaloriesConsumed = 0; // Track total calories consumed
+        let totalDistance = 0; // New: Total distance for cardio
+        let totalCaloriesBurned = 0; // New: Total calories burned for cardio
+
         let isUiReady = false; // Flag to ensure UI elements are ready
         let unsubscribeFoodListener = null; // To hold the unsubscribe function for food entries listener
+        let unsubscribeCardioListener = null; // New: To hold the unsubscribe function for cardio entries listener
 
         // UI Elements (declared globally, assigned in window.onload)
         let proteinGoalDisplay;
@@ -283,9 +300,17 @@
         let manualProteinInput;
         let manualQuantityInput;
         let searchFoodNameInput;
+        // New Cardio UI Elements
+        let currentDistanceDisplay;
+        let currentCaloriesBurnedDisplay;
+        let manualCardioDistanceInput;
+        let manualCardioCaloriesBurnedInput;
+        let searchCardioInput; // Combined search input for cardio
+
         let settingsModal;
         let settingsProteinGoalInput;
         let settingsCalorieGoalInput;
+        let settingsWeightInput; // New weight input in settings
         let loadingOverlay;
         let messageBox;
 
@@ -325,27 +350,41 @@
             }
             showLoading(true);
             try {
-                const foodEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/foodEntries`);
-                const startOfCalorieDay = getStartOfCalorieDayUTC(); // Get the start of the day whose data needs to be cleared
-                const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1); // 24 hours minus 1 ms
+                const startOfCalorieDay = getStartOfCalorieDayUTC();
+                const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1);
 
-                const q = query(foodEntriesCollectionRef,
+                // --- Delete Food Entries ---
+                const foodEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/foodEntries`);
+                const foodQuery = query(foodEntriesCollectionRef,
                     where("timestamp", ">=", startOfCalorieDay),
                     where("timestamp", "<=", endOfCalorieDay)
                 );
+                const foodSnapshot = await getDocs(foodQuery);
+                const foodDeletePromises = [];
+                foodSnapshot.forEach((doc) => foodDeletePromises.push(deleteDoc(doc.ref)));
+                await Promise.all(foodDeletePromises);
+                console.log(`Successfully deleted ${foodSnapshot.size} food entries for the current day.`);
 
-                const querySnapshot = await getDocs(q);
-                const deletePromises = [];
+                // --- Delete Cardio Entries ---
+                const cardioEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/cardioEntries`);
+                const cardioQuery = query(cardioEntriesCollectionRef,
+                    where("timestamp", ">=", startOfCalorieDay),
+                    where("timestamp", "<=", endOfCalorieDay)
+                );
+                const cardioSnapshot = await getDocs(cardioQuery);
+                const cardioDeletePromises = [];
+                cardioSnapshot.forEach((doc) => cardioDeletePromises.push(deleteDoc(doc.ref)));
+                await Promise.all(cardioDeletePromises);
+                console.log(`Successfully deleted ${cardioSnapshot.size} cardio entries for the current day.`);
 
-                if (querySnapshot.empty) {
-                    console.log("No entries to reset for today.");
-                } else {
-                    querySnapshot.forEach((doc) => {
-                        deletePromises.push(deleteDoc(doc.ref));
-                    });
-                    await Promise.all(deletePromises);
-                    console.log(`Successfully deleted ${querySnapshot.size} food entries for the current day.`);
-                }
+                // Manually reset UI and re-fetch (listeners will pick up empty collections)
+                totalProteinConsumed = 0;
+                totalCaloriesConsumed = 0;
+                totalDistance = 0;
+                totalCaloriesBurned = 0;
+                updateSummaryDisplay();
+                console.log("All daily data reset successfully in UI.");
+
             } catch (error) {
                 console.error("Error resetting daily totals in Firestore:", error);
             } finally {
@@ -369,9 +408,17 @@
             manualProteinInput = document.getElementById('manualProtein');
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
+            // New Cardio UI Elements assignments
+            currentDistanceDisplay = document.getElementById('currentDistanceDisplay');
+            currentCaloriesBurnedDisplay = document.getElementById('currentCaloriesBurnedDisplay');
+            manualCardioDistanceInput = document.getElementById('manualCardioDistance');
+            manualCardioCaloriesBurnedInput = document.getElementById('manualCardioCaloriesBurned');
+            searchCardioInput = document.getElementById('searchCardio');
+
             settingsModal = document.getElementById('settingsModal');
             settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
             settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
+            settingsWeightInput = document.getElementById('settingsWeight'); // New weight input
             loadingOverlay = document.getElementById('loadingOverlay');
             messageBox = document.getElementById('messageBox');
 
@@ -381,6 +428,10 @@
             document.getElementById('openSettingsBtn').addEventListener('click', openSettingsModal);
             document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
             document.getElementById('resetDailyBtn').addEventListener('click', resetDailyTotalsInFirestore); // Event listener for the new reset button
+            // New Cardio Event Listeners
+            document.getElementById('addManualCardioBtn').addEventListener('click', addManualCardioEntry);
+            document.getElementById('searchCardioBtn').addEventListener('click', searchCardioAndAutoAddMetrics);
+
             if (settingsModal) {
                 settingsModal.addEventListener('click', (e) => {
                     if (e.target === settingsModal) {
@@ -419,6 +470,7 @@
                         console.log("Authenticated with user ID:", userId);
                         listenForGoals();
                         listenForFoodEntries();
+                        listenForCardioEntries(); // New: Start listening for cardio entries
                     } else {
                         try {
                             await signInAnonymously(auth);
@@ -427,6 +479,7 @@
                             console.error("Firebase authentication error during anonymous sign-in:", error);
                             currentProteinGoal = 100;
                             currentCalorieGoal = 2000;
+                            currentWeight = 150; // Default weight if auth fails
                             updateSummaryDisplay();
                             console.warn("Data persistence will not work due to authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
                         }
@@ -437,6 +490,7 @@
                 console.warn("Data persistence will not work. Check your Firebase config and network connection.");
                 currentProteinGoal = 100;
                 currentCalorieGoal = 2000;
+                currentWeight = 150; // Default weight if init fails
                 updateSummaryDisplay();
             }
         };
@@ -454,15 +508,18 @@
                     const data = docSnap.data();
                     currentProteinGoal = data.proteinGoal || 0;
                     currentCalorieGoal = data.calorieGoal || 0;
+                    currentWeight = data.weight || 0; // New: Retrieve weight
                     updateSummaryDisplay();
                     console.log("Goals updated:", data);
                 } else {
+                    // Set default goals and weight if none exist
                     currentProteinGoal = 100;
                     currentCalorieGoal = 2000;
+                    currentWeight = 150; // Default weight
                     if (db) {
-                        setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal })
-                            .then(() => console.log("Default goals set."))
-                            .catch(error => console.error("Error setting default goals:", error));
+                        setDoc(goalsDocRef, { proteinGoal: currentProteinGoal, calorieGoal: currentCalorieGoal, weight: currentWeight })
+                            .then(() => console.log("Default goals and weight set."))
+                            .catch(error => console.error("Error setting default goals and weight:", error));
                     }
                 }
             }, (error) => {
@@ -512,6 +569,48 @@
             });
         }
 
+        // New function: Listen for cardio entries
+        function listenForCardioEntries() {
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot listen for cardio entries.");
+                return;
+            }
+            // Unsubscribe from previous listener if it exists
+            if (unsubscribeCardioListener) {
+                unsubscribeCardioListener();
+                console.log("Unsubscribed from previous cardio entries listener.");
+            }
+
+            const cardioEntriesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/cardioEntries`);
+
+            const startOfCalorieDay = getStartOfCalorieDayUTC();
+            const endOfCalorieDay = new Date(startOfCalorieDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+            const q = query(cardioEntriesCollectionRef,
+                where("timestamp", ">=", startOfCalorieDay),
+                where("timestamp", "<=", endOfCalorieDay)
+            );
+
+            unsubscribeCardioListener = onSnapshot(q, (snapshot) => {
+                totalDistance = 0;
+                totalCaloriesBurned = 0;
+
+                snapshot.forEach((doc) => {
+                    const entry = doc.data();
+                    totalDistance += entry.distance;
+                    totalCaloriesBurned += entry.caloriesBurned;
+                });
+
+                currentDistanceDisplay.textContent = totalDistance.toFixed(1); // Display distance with 1 decimal
+                currentCaloriesBurnedDisplay.textContent = totalCaloriesBurned.toFixed(0); // Display calories burned
+
+                updateSummaryDisplay();
+                console.log("Cardio entries updated. Total Distance:", totalDistance, "Total Calories Burned:", totalCaloriesBurned);
+            }, (error) => {
+                console.error("Error listening to cardio entries:", error);
+            });
+        }
+
         // --- UI Update Functions ---
 
         function updateSummaryDisplay() {
@@ -555,22 +654,18 @@
         // --- Event Handlers ---
 
         async function addManualFoodEntry() {
-            // Use parseFloat directly on value; if empty string, it becomes NaN, then || 0/1 handles it.
             const calories = parseFloat(manualCaloriesInput.value) || 0;
-            const protein = parseFloat(manualProteinInput.value) || 0; // Defaults to 0 if blank or invalid
-            const quantity = parseFloat(manualQuantityInput.value) || 1; // Defaults to 1 if blank or invalid
+            const protein = parseFloat(manualProteinInput.value) || 0;
+            const quantity = parseFloat(manualQuantityInput.value) || 1;
 
-            // Validate specifically for values that MUST be positive
             if (isNaN(calories) || calories < 0 || isNaN(quantity) || quantity <= 0) {
                  console.error('Validation Error: Calories must be a non-negative number. Quantity must be a positive number.');
                  return;
             }
-            // Protein can be 0 or positive, so only check for negative if it's explicitly parsed as such
             if (isNaN(protein) || protein < 0) {
                  console.error('Validation Error: Protein must be a non-negative number.');
                  return;
             }
-
 
             const finalCalories = calories * quantity;
             const finalProtein = protein * quantity;
@@ -624,7 +719,6 @@
             showLoading(true);
 
             try {
-                // Modified prompt to handle quantity in natural language
                 const prompt = `Estimate the total protein (in grams) and total calories for the following food item(s) as described: '${foodName}'. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set protein and calories to 0. Example: { "foodName": "four eggs with mozzarella cheese", "protein": 40, "calories": 500 }`;
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
@@ -636,7 +730,7 @@
                         responseSchema: {
                             type: "OBJECT",
                             properties: {
-                                "foodName": { "type": "STRING" }, // AI should echo the food name
+                                "foodName": { "type": "STRING" },
                                 "protein": { "type": "NUMBER" },
                                 "calories": { "type": "NUMBER" }
                             },
@@ -696,9 +790,139 @@
             }
         }
 
+        // New function: Add manual cardio entry
+        async function addManualCardioEntry() {
+            const distance = parseFloat(manualCardioDistanceInput.value) || 0;
+            const caloriesBurned = parseFloat(manualCardioCaloriesBurnedInput.value) || 0;
+
+            if (isNaN(distance) || distance < 0 || isNaN(caloriesBurned) || caloriesBurned < 0) {
+                console.error('Validation Error: Distance and Calories Burned must be non-negative numbers.');
+                return;
+            }
+
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot add manual cardio entry. Adding to local totals only.");
+                totalDistance += distance;
+                totalCaloriesBurned += caloriesBurned;
+                updateSummaryDisplay();
+                manualCardioDistanceInput.value = '';
+                manualCardioCaloriesBurnedInput.value = '';
+                return;
+            }
+
+            try {
+                showLoading(true);
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/cardioEntries`), {
+                    name: `Manual Cardio (${distance} miles)`,
+                    distance: distance,
+                    caloriesBurned: caloriesBurned,
+                    timestamp: serverTimestamp()
+                });
+                manualCardioDistanceInput.value = '';
+                manualCardioCaloriesBurnedInput.value = '';
+            } catch (e) {
+                console.error("Error adding manual cardio entry: ", e);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // New function: Search cardio and auto-add metrics (AI powered)
+        async function searchCardioAndAutoAddMetrics() {
+            const activityDescription = searchCardioInput.value.trim();
+
+            if (!activityDescription) {
+                console.error('Please describe your cardio activity.');
+                return;
+            }
+
+            const apiKey = "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE";
+
+            if (!db && apiKey === "AIzaSyADS0DXiYSI4mcDxEfQ4pETNntHxyQwDrE") {
+                console.warn("Firestore db not initialized AND AI search API key is missing/default. Cannot save search result or perform AI search.");
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                // Construct prompt, including weight if available and emphasizing accurate calculation
+                const weightInfo = currentWeight > 0 ? ` (assuming a body weight of ${currentWeight} lbs)` : '';
+                const prompt = `Calculate the total distance (in miles) and estimate the calories burned for the activity: '${activityDescription}'${weightInfo}. Consider the following factors for calorie estimation: distance, pace, elevation gain, and a body weight of ${currentWeight} lbs. Use accurate scientific formulas or widely accepted methods for calorie expenditure for the given activity type. Provide the response in JSON format. If you cannot provide a precise value, give a reasonable estimate. If you cannot estimate, set distance and caloriesBurned to 0. Example: { "activity": "2.4 mile walk with 114ft elevation at 11:24 pace", "distance": 2.4, "caloriesBurned": 200 }`;
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+                const payload = {
+                    contents: chatHistory,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "activity": { "type": "STRING" },
+                                "distance": { "type": "NUMBER" },
+                                "caloriesBurned": { "type": "NUMBER" }
+                            },
+                            required: ["activity", "distance", "caloriesBurned"]
+                        }
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonString = result.candidates[0].content.parts[0].text;
+                    const parsedMetrics = JSON.parse(jsonString);
+
+                    if (parsedMetrics.distance !== undefined && parsedMetrics.caloriesBurned !== undefined) {
+                        const finalDistance = parsedMetrics.distance;
+                        const finalCaloriesBurned = parsedMetrics.caloriesBurned;
+
+                        if (db) {
+                            await addDoc(collection(db, `artifacts/${appId}/users/${userId}/cardioEntries`), {
+                                name: parsedMetrics.activity || activityDescription,
+                                distance: finalDistance,
+                                caloriesBurned: finalCaloriesBurned,
+                                timestamp: serverTimestamp()
+                            });
+                        } else {
+                            totalDistance += finalDistance;
+                            totalCaloriesBurned += finalCaloriesBurned;
+                            updateSummaryDisplay();
+                        }
+                        searchCardioInput.value = '';
+                    } else {
+                        console.error('Could not get valid cardio metrics from AI. Please try manual entry.');
+                    }
+                } else {
+                    console.error('AI could not estimate cardio metrics. Try manual entry.');
+                }
+            } catch (error) {
+                console.error("Error searching cardio with AI:", error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
         function openSettingsModal() {
             settingsProteinGoalInput.value = currentProteinGoal;
             settingsCalorieGoalInput.value = currentCalorieGoal;
+            settingsWeightInput.value = currentWeight; // Load current weight into settings
             settingsModal.classList.add('open');
         }
 
@@ -709,15 +933,19 @@
         async function saveSettings() {
             const newProteinGoal = parseFloat(settingsProteinGoalInput.value);
             const newCalorieGoal = parseFloat(settingsCalorieGoalInput.value);
+            const newWeight = parseFloat(settingsWeightInput.value); // Get new weight
 
-            if (isNaN(newProteinGoal) || isNaN(newCalorieGoal) || newProteinGoal < 0 || newCalorieGoal < 0) {
-                console.error('Please enter valid positive numbers for goals.');
+            if (isNaN(newProteinGoal) || newProteinGoal < 0 ||
+                isNaN(newCalorieGoal) || newCalorieGoal < 0 ||
+                isNaN(newWeight) || newWeight <= 0) { // Weight must be positive
+                console.error('Please enter valid positive numbers for goals and weight.');
                 return;
             }
             if (!db || !appId || !userId) {
                 console.warn("Firestore db, appId, or userId not initialized. Cannot save settings. Updating local goals only.");
                 currentProteinGoal = newProteinGoal;
                 currentCalorieGoal = newCalorieGoal;
+                currentWeight = newWeight;
                 updateSummaryDisplay();
                 settingsModal.classList.remove('open');
                 return;
@@ -728,7 +956,8 @@
                 const goalsDocRef = doc(db, `artifacts/${appId}/users/${userId}/goals/daily`);
                 await setDoc(goalsDocRef, {
                     proteinGoal: newProteinGoal,
-                    calorieGoal: newCalorieGoal
+                    calorieGoal: newCalorieGoal,
+                    weight: newWeight // Save weight
                 }, { merge: true });
                 settingsModal.classList.remove('open');
             } catch (e) {
@@ -764,35 +993,72 @@
                     <p class="text-gray-600 text-sm mt-2">Left: <span id="caloriesLeftDisplay" class="font-semibold">0</span></p>
                 </div>
             </div>
-            <button id="openSettingsBtn" class="w-full secondary-button mt-4">Set Goals</button>
-            <button id="resetDailyBtn" class="w-full secondary-button mt-2">Reset All Data for Today</button>
-        </div>
 
-        <!-- Add Food Section -->
-        <div class="bg-gray-50 p-6 rounded-2xl shadow-md">
-            <h2 class="section-title text-gray-800">Add Food</h2>
-
-            <!-- Search Food (AI Powered) - Moved to the top within Add Food section -->
-            <div>
-                <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Macros</h3>
-                <div class="search-input-group mb-6"> <!-- Added mb-6 for spacing -->
-                    <input type="text" id="searchFoodName" placeholder="Search">
-                    <button id="searchFoodBtn">Add</button>
+            <!-- Daily Cardio Summary -->
+            <div class="grid grid-cols-2 gap-4 text-center mt-6">
+                <div>
+                    <p class="text-gray-600 text-sm">Distance (miles)</p>
+                    <p class="text-xl font-semibold text-indigo-700"><span id="currentDistanceDisplay">0.0</span></p>
+                    <p class="text-gray-600 text-sm mt-2">&nbsp;</p> <!-- Filler to align with "Left" text -->
+                </div>
+                <div>
+                    <p class="text-gray-600 text-sm">Calories Burned</p>
+                    <p class="text-xl font-semibold text-indigo-700"><span id="currentCaloriesBurnedDisplay">0</span></p>
+                    <p class="text-gray-600 text-sm mt-2">&nbsp;</p> <!-- Filler to align with "Left" text -->
                 </div>
             </div>
 
-            <!-- Manual Entry - Now below Search -->
-            <div>
-                <h3 class="font-semibold text-gray-800 mb-2">Manually Add Macros</h3>
-                <div class="manual-entry-grid mb-3">
-                    <!-- Calories first -->
-                    <input type="number" id="manualCalories" placeholder="Calories">
-                    <!-- Then Protein -->
-                    <input type="number" id="manualProtein" placeholder="Protein (g)">
-                    <!-- New Quantity for Manual Entry -->
-                    <input type="number" id="manualQuantity" placeholder="Qty (e.g., 1)" value="1">
+            <button id="openSettingsBtn" class="w-full secondary-button mt-4">Settings</button>
+            <button id="resetDailyBtn" class="w-full secondary-button mt-2">Reset All Data for Today</button>
+        </div>
+
+        <!-- Add Food & Cardio Section -->
+        <div class="space-y-6"> <!-- Container for the two new cards -->
+            <!-- Add Food Box -->
+            <div class="sub-section-card">
+                <h2 class="section-title text-gray-800">Add Food</h2>
+                <!-- Search Food (AI Powered) -->
+                <div class="mb-6">
+                    <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Food Macros</h3>
+                    <div class="search-input-group">
+                        <input type="text" id="searchFoodName" placeholder="Search">
+                        <button id="searchFoodBtn">Add Food</button>
+                    </div>
                 </div>
-                <button id="addManualFoodBtn" class="w-full">Add Manual Entry</button>
+
+                <!-- Manual Entry -->
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-2">Manually Add Food Macros</h3>
+                    <div class="manual-entry-grid mb-3">
+                        <input type="number" id="manualCalories" placeholder="Calories">
+                        <input type="number" id="manualProtein" placeholder="Protein (g)">
+                        <input type="number" id="manualQuantity" placeholder="Qty (e.g., 1)" value="1">
+                    </div>
+                    <button id="addManualFoodBtn" class="w-full">Add Manual Food</button>
+                </div>
+            </div>
+
+            <!-- Add Cardio Box -->
+            <div class="sub-section-card">
+                <h2 class="section-title text-gray-800">Add Cardio</h2>
+                <!-- Search & Auto-Add Cardio -->
+                <div class="mb-6">
+                    <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Cardio</h3>
+                    <div class="search-input-group">
+                        <input type="text" id="searchCardio" placeholder="Search">
+                        <button id="searchCardioBtn">Add Cardio</button>
+                    </div>
+                </div>
+
+                <!-- Manually Add Cardio -->
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-2">Manually Add Cardio</h3>
+                    <div class="manual-entry-grid mb-3">
+                        <input type="number" id="manualCardioDistance" placeholder="Distance (miles)">
+                        <input type="number" id="manualCardioCaloriesBurned" placeholder="Calories Burned">
+                    </div>
+                    <button id="addManualCardioBtn" class="w-full">Add Manual Cardio</button>
+                </div>
             </div>
         </div>
     </div>
@@ -801,7 +1067,7 @@
     <div id="settingsModal" class="modal-overlay">
         <div class="modal-content">
             <button class="close-button" id="closeSettingsBtn">&times;</button>
-            <h2 class="section-title text-gray-800 mb-4">Set Daily Goals</h2>
+            <h2 class="section-title text-gray-800 mb-4">Settings</h2>
             <div class="mb-4">
                 <label for="settingsProteinGoal" class="block text-gray-700 text-sm font-bold mb-2">Protein Goal (g)</label>
                 <input type="number" id="settingsProteinGoal" class="w-full" placeholder="e.g., 150">
@@ -809,6 +1075,10 @@
             <div class="mb-6">
                 <label for="settingsCalorieGoal" class="block text-gray-700 text-sm font-bold mb-2">Calorie Goal</label>
                 <input type="number" id="settingsCalorieGoal" class="w-full" placeholder="e.g., 2000">
+            </div>
+            <div class="mb-6">
+                <label for="settingsWeight" class="block text-gray-700 text-sm font-bold mb-2">Weight (lbs)</label>
+                <input type="number" id="settingsWeight" class="w-full" placeholder="e.g., 150">
             </div>
             <button id="saveSettingsBtn" class="w-full">Save Goals</button>
         </div>
