@@ -340,6 +340,41 @@
             }
         }
 
+        /**
+         * Evaluates a mathematical expression string and returns the result.
+         * Basic validation for safety.
+         * @param {string} expression - The mathematical expression to evaluate.
+         * @returns {number | null} The result of the evaluation, or null if invalid.
+         */
+        function evaluateMathExpression(expression) {
+            // Remove any whitespace
+            expression = String(expression).replace(/\s+/g, '');
+
+            // Basic validation to prevent arbitrary code execution (e.g., "1 + 1; alert('hi')")
+            // This regex allows numbers, decimals, basic operators (+, -, *, /), and parentheses.
+            // It does NOT allow function calls, semicolons, letters, etc.
+            const safeExpressionRegex = /^[0-9+\-*/().]+$/;
+
+            if (!safeExpressionRegex.test(expression)) {
+                console.error("Invalid characters in expression:", expression);
+                return null;
+            }
+
+            try {
+                // Using eval() with careful input validation for simple math is generally acceptable
+                // in client-side personal tools, but should be avoided for complex/public apps.
+                const result = eval(expression);
+                if (typeof result === 'number' && isFinite(result)) {
+                    return result;
+                }
+                return null;
+            } catch (e) {
+                console.error("Error evaluating expression:", expression, e);
+                return null;
+            }
+        }
+
+
         // Helper function to get the start of the current "calorie day" (3 AM UTC)
         function getStartOfCalorieDayUTC() {
             const now = new Date();
@@ -424,7 +459,7 @@
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
             searchFoodQuantityInput = document.getElementById('searchFoodQuantity'); // New: Assign search food quantity
-            // New Cardio UI Elements assignments
+            // New Cardio UI Elements
             currentDistanceDisplay = document.getElementById('currentDistanceDisplay');
             currentCaloriesBurnedDisplay = document.getElementById('currentCaloriesBurnedDisplay');
             manualCardioDistanceInput = document.getElementById('manualCardioDistance');
@@ -466,7 +501,7 @@
                 apiKey: "AIzaSyBWfl0ygLwWAjLy1f-9hZa5w6CE66YY-40",
                 authDomain: "calorie-tracker-10dc5.firebaseapp.com",
                 projectId: "calorie-tracker-10dc5",
-                storageBucket: "calorie-tracker-10dc5.firebasestorage.app",
+                storageBucket: "calorie-tracker-10dc5.appspot.com",
                 appId: "1:980712360641:web:5ec3e7b33dcab547556240",
                 messagingSenderId: "980712360641",
                 measurementId: "G-G59S80WVVD"
@@ -497,7 +532,7 @@
                             currentCalorieGoal = 2000;
                             currentWeight = 150; // Default weight if auth fails
                             updateSummaryDisplay();
-                            console.warn("Data persistence will not work due => authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
+                            console.warn("Data persistence will not work due to authentication error. Check Firebase project settings (Authentication > Sign-in method > Anonymous).");
                         }
                     }
                 });
@@ -672,14 +707,10 @@
         async function addManualFoodEntry() {
             const calories = parseFloat(manualCaloriesInput.value) || 0;
             const protein = parseFloat(manualProteinInput.value) || 0;
-            const quantity = parseFloat(manualQuantityInput.value) || 1;
+            const quantity = evaluateMathExpression(manualQuantityInput.value);
 
-            if (isNaN(calories) || calories < 0 || isNaN(quantity) || quantity <= 0) {
-                 console.error('Validation Error: Calories must be a non-negative number. Quantity must be a positive number.');
-                 return;
-            }
-            if (isNaN(protein) || protein < 0) {
-                 console.error('Validation Error: Protein must be a non-negative number.');
+            if (quantity === null || isNaN(calories) || calories < 0 || quantity <= 0 || isNaN(protein) || protein < 0) {
+                 console.error('Validation Error: Calories and Protein must be non-negative numbers. Quantity must be a positive number or valid math expression.');
                  return;
             }
 
@@ -700,7 +731,7 @@
             try {
                 showLoading(true);
                 await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
-                    name: `Manual Entry (${quantity}x)`,
+                    name: `Manual Entry (${manualQuantityInput.value} = ${quantity.toFixed(2)}x)`, // Show raw and evaluated quantity
                     protein: finalProtein,
                     calories: finalCalories,
                     timestamp: serverTimestamp()
@@ -717,14 +748,14 @@
 
         async function searchFoodAndAutoAddMacros() {
             const foodName = searchFoodNameInput.value.trim();
-            const quantity = parseFloat(searchFoodQuantityInput.value) || 1; // Get quantity for search food
+            const quantity = evaluateMathExpression(searchFoodQuantityInput.value); // Evaluate quantity for search food
 
             if (!foodName) {
                 console.error('Please enter a food name to search.');
                 return;
             }
-            if (isNaN(quantity) || quantity <= 0) {
-                console.error('Quantity must be a positive number.');
+            if (quantity === null || quantity <= 0) {
+                console.error('Quantity must be a positive number or valid math expression.');
                 return;
             }
 
@@ -758,7 +789,7 @@
                     const firstFood = data.foods[0];
                     const protein = (firstFood.nf_protein || 0) * quantity; // Apply quantity
                     const calories = (firstFood.nf_calories || 0) * quantity; // Apply quantity
-                    const foodDescription = `${foodName} (${quantity}x)`; // Update description to show quantity
+                    const foodDescription = `${foodName} (${searchFoodQuantityInput.value} = ${quantity.toFixed(2)}x)`; // Update description to show raw and evaluated quantity
 
                     if (db) {
                         await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
@@ -1017,7 +1048,7 @@
                     <h3 class="font-semibold text-gray-800 mb-2">Search & Auto-Add Food Macros</h3>
                     <div class="search-input-group search-input-group-row">
                         <input type="text" id="searchFoodName" placeholder="Search">
-                        <input type="number" id="searchFoodQuantity" placeholder="Qty" value="1" min="0.1" step="0.1">
+                        <input type="text" id="searchFoodQuantity" placeholder="Qty" value="1">
                         <button id="searchFoodBtn">Add Food</button>
                     </div>
                 </div>
@@ -1028,7 +1059,7 @@
                     <div class="manual-entry-grid mb-3">
                         <input type="number" id="manualCalories" placeholder="Calories">
                         <input type="number" id="manualProtein" placeholder="Protein (g)">
-                        <input type="number" id="manualQuantity" placeholder="Qty (e.g., 1)" value="1">
+                        <input type="text" id="manualQuantity" placeholder="Qty (e.g., 1 or 22/18)" value="1">
                     </div>
                     <button id="addManualFoodBtn" class="w-full">Add Manual Food</button>
                 </div>
