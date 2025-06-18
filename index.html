@@ -80,11 +80,11 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Smaller shadow on click */
         }
         /* Primary button */
-        #addManualFoodBtn, #searchFoodBtn, #saveSettingsBtn, #addManualCardioBtn, #searchCardioBtn {
+        #addManualFoodBtn, #searchFoodBtn, #saveSettingsBtn, #addManualCardioBtn, #searchCardioBtn, #addCustomPresetFoodBtn, #addGramsEntryBtn {
             background-color: #667eea; /* Vibrant Indigo primary button */
             color: white;
         }
-        #addManualFoodBtn:hover, #searchFoodBtn:hover, #saveSettingsBtn:hover, #addManualCardioBtn:hover, #searchCardioBtn:hover {
+        #addManualFoodBtn:hover, #searchFoodBtn:hover, #saveSettingsBtn:hover, #addManualCardioBtn:hover, #searchCardioBtn:hover, #addCustomPresetFoodBtn:hover, #addGramsEntryBtn:hover {
             background-color: #5a67d8; /* Darker indigo on hover */
         }
         /* Secondary button (Set Goals) */
@@ -269,6 +269,64 @@
         .sub-section-card:last-child {
             margin-bottom: 0;
         }
+
+        /* Custom Dropdown Styles */
+        .custom-dropdown-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 1rem; /* Space between dropdown and manual fields */
+            z-index: 10; /* Ensure dropdown appears above other elements */
+        }
+        .custom-dropdown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+            background-color: #2D3748;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .custom-dropdown-header:hover {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
+        }
+        .dropdown-arrow {
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+            transition: transform 0.2s ease-in-out;
+        }
+        .custom-dropdown-header.open .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+        .custom-dropdown-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 0.75rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+        .custom-dropdown-item {
+            padding: 0.75rem 1rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: background-color 0.1s ease-in-out;
+        }
+        .custom-dropdown-item:hover {
+            background-color: #4a5568;
+        }
+        /* Ensure specific hidden/visible states are handled correctly */
+        .hidden {
+            display: none !important;
+        }
     </style>
     <!-- Firebase SDK CDN -->
     <script type="module">
@@ -293,6 +351,7 @@
         let isUiReady = false; // Flag to ensure UI elements are ready
         let unsubscribeFoodListener = null; // To hold the unsubscribe function for food entries listener
         let unsubscribeCardioListener = null; // New: To hold the unsubscribe function for cardio entries listener
+        let unsubscribePresetFoodsListener = null; // New: To hold the unsubscribe for preset foods
 
         // Nutritionix API Keys (REPLACE WITH YOUR OWN!)
         // WARNING: Directly exposing API keys in client-side code is NOT secure for production.
@@ -328,6 +387,23 @@
         let settingsWeightInput; // New weight input in settings
         let loadingOverlay;
         let messageBox;
+
+        // New UI elements for preset foods
+        let presetDropdownHeader;
+        let presetDropdownOptions;
+        let selectedPresetFoodNameDisplay;
+        let customPresetFoodInputs;
+        let customPresetCaloriesInput;
+        let customPresetProteinInput;
+        let customPresetServingSizeInput;
+        let addCustomPresetFoodBtn;
+        let toggleCustomFoodInputBtn; // New button to toggle custom food input visibility
+
+        // New UI elements for quantity input modal
+        let quantityInputModal;
+        let quantityInputGrams;
+        let addGramsEntryBtn;
+        let selectedPresetFood = null; // To store the food selected from the dropdown
 
 
         // Function to show/hide loading spinner
@@ -458,8 +534,8 @@
             manualProteinInput = document.getElementById('manualProtein');
             manualQuantityInput = document.getElementById('manualQuantity');
             searchFoodNameInput = document.getElementById('searchFoodName');
-            searchFoodQuantityInput = document.getElementById('searchFoodQuantity'); // New: Assign search food quantity
-            // New Cardio UI Elements
+            searchFoodQuantityInput = document.getElementById('searchFoodQuantity');
+            // New Cardio UI Elements assignments
             currentDistanceDisplay = document.getElementById('currentDistanceDisplay');
             currentCaloriesBurnedDisplay = document.getElementById('currentCaloriesBurnedDisplay');
             manualCardioDistanceInput = document.getElementById('manualCardioDistance');
@@ -469,24 +545,66 @@
             settingsModal = document.getElementById('settingsModal');
             settingsProteinGoalInput = document.getElementById('settingsProteinGoal');
             settingsCalorieGoalInput = document.getElementById('settingsCalorieGoal');
-            settingsWeightInput = document.getElementById('settingsWeight'); // New weight input
+            settingsWeightInput = document.getElementById('settingsWeight');
             loadingOverlay = document.getElementById('loadingOverlay');
             messageBox = document.getElementById('messageBox');
+
+            // Assign new preset food UI elements
+            presetDropdownHeader = document.getElementById('presetDropdownHeader');
+            presetDropdownOptions = document.getElementById('presetDropdownOptions');
+            selectedPresetFoodNameDisplay = document.getElementById('selectedPresetFoodName');
+            customPresetFoodInputs = document.getElementById('customPresetFoodInputs');
+            customPresetCaloriesInput = document.getElementById('customPresetCalories');
+            customPresetProteinInput = document.getElementById('customPresetProtein');
+            customPresetServingSizeInput = document.getElementById('customPresetServingSize');
+            addCustomPresetFoodBtn = document.getElementById('addCustomPresetFoodBtn');
+            toggleCustomFoodInputBtn = document.getElementById('toggleCustomFoodInputBtn');
+
+
+            // Assign new quantity input modal UI elements
+            quantityInputModal = document.getElementById('quantityInputModal');
+            quantityInputGrams = document.getElementById('quantityInputGrams');
+            addGramsEntryBtn = document.getElementById('addGramsEntryBtn');
 
             // Add event listeners here after elements are assigned
             document.getElementById('addManualFoodBtn').addEventListener('click', addManualFoodEntry);
             document.getElementById('searchFoodBtn').addEventListener('click', searchFoodAndAutoAddMacros);
             document.getElementById('openSettingsBtn').addEventListener('click', openSettingsModal);
             document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
-            document.getElementById('resetDailyBtn').addEventListener('click', resetDailyTotalsInFirestore); // Event listener for the new reset button
+            document.getElementById('resetDailyBtn').addEventListener('click', resetDailyTotalsInFirestore);
             // New Cardio Event Listeners
             document.getElementById('addManualCardioBtn').addEventListener('click', addManualCardioEntry);
             document.getElementById('searchCardioBtn').addEventListener('click', searchCardioAndAutoAddMetrics);
+
+            // New Preset Food Event Listeners
+            presetDropdownHeader.addEventListener('click', togglePresetDropdown);
+            // Options themselves will have click listeners added dynamically in populatePresetFoodDropdown
+            addCustomPresetFoodBtn.addEventListener('click', addCustomPresetFood);
+            toggleCustomFoodInputBtn.addEventListener('click', toggleCustomFoodInput); // New event listener
+            document.getElementById('closeQuantityModalBtn').addEventListener('click', closeQuantityModal);
+            addGramsEntryBtn.addEventListener('click', addGramsEntry);
+
+            // Close dropdown if clicked outside
+            document.addEventListener('click', (event) => {
+                const dropdownContainer = document.querySelector('.custom-dropdown-container');
+                if (dropdownContainer && !dropdownContainer.contains(event.target)) {
+                    presetDropdownOptions.classList.add('hidden');
+                    presetDropdownHeader.classList.remove('open');
+                }
+            });
+
 
             if (settingsModal) {
                 settingsModal.addEventListener('click', (e) => {
                     if (e.target === settingsModal) {
                         closeSettingsModal();
+                    }
+                });
+            }
+            if (quantityInputModal) {
+                quantityInputModal.addEventListener('click', (e) => {
+                    if (e.target === quantityInputModal) {
+                        closeQuantityModal();
                     }
                 });
             }
@@ -521,7 +639,8 @@
                         console.log("Authenticated with user ID:", userId);
                         listenForGoals();
                         listenForFoodEntries();
-                        listenForCardioEntries(); // New: Start listening for cardio entries
+                        listenForCardioEntries();
+                        listenForPresetFoods(); // Start listening for preset foods
                     } else {
                         try {
                             await signInAnonymously(auth);
@@ -660,6 +779,53 @@
             }, (error) => {
                 console.error("Error listening to cardio entries:", error);
             });
+        }
+
+        // New function: Listen for preset foods
+        function listenForPresetFoods() {
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot listen for preset foods.");
+                return;
+            }
+            if (unsubscribePresetFoodsListener) {
+                unsubscribePresetFoodsListener();
+                console.log("Unsubscribed from previous preset foods listener.");
+            }
+
+            const presetFoodsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/presetFoods`);
+            unsubscribePresetFoodsListener = onSnapshot(presetFoodsCollectionRef, (snapshot) => {
+                const foods = [];
+                snapshot.forEach((doc) => {
+                    foods.push({ id: doc.id, ...doc.data() });
+                });
+                populatePresetFoodDropdown(foods);
+                console.log("Preset foods updated:", foods);
+            }, (error) => {
+                console.error("Error listening to preset foods:", error);
+            });
+        }
+
+        function populatePresetFoodDropdown(foods) {
+            presetDropdownOptions.innerHTML = ''; // Clear existing options
+            if (foods.length === 0) {
+                const noFoodItem = document.createElement('div');
+                noFoodItem.classList.add('custom-dropdown-item');
+                noFoodItem.textContent = 'No preset foods yet. Add custom!';
+                noFoodItem.style.pointerEvents = 'none'; // Make it unclickable
+                noFoodItem.style.opacity = '0.7';
+                presetDropdownOptions.appendChild(noFoodItem);
+            } else {
+                foods.forEach(food => {
+                    const item = document.createElement('div');
+                    item.classList.add('custom-dropdown-item');
+                    item.textContent = food.name;
+                    item.dataset.food = JSON.stringify(food); // Store full food object
+                    item.addEventListener('click', handlePresetFoodItemClick);
+                    presetDropdownOptions.appendChild(item);
+                });
+            }
+            // Reset header display when dropdown is repopulated
+            selectedPresetFoodNameDisplay.textContent = '-- Select Preset Food --';
         }
 
         // --- UI Update Functions ---
@@ -945,6 +1111,140 @@
             }
         }
 
+        // Toggles the visibility of the custom preset food dropdown options
+        function togglePresetDropdown() {
+            presetDropdownOptions.classList.toggle('hidden');
+            presetDropdownHeader.classList.toggle('open');
+        }
+
+        // Handles click on an individual preset food item in the custom dropdown
+        function handlePresetFoodItemClick(event) {
+            selectedPresetFood = JSON.parse(event.target.dataset.food);
+            selectedPresetFoodNameDisplay.textContent = selectedPresetFood.name; // Update header
+            presetDropdownOptions.classList.add('hidden'); // Hide dropdown options
+            presetDropdownHeader.classList.remove('open'); // Reset header arrow
+            openQuantityModal();
+        }
+
+        // Toggles visibility of the custom food input fields
+        function toggleCustomFoodInput() {
+            customPresetFoodInputs.classList.toggle('hidden');
+            // The addCustomPresetFoodBtn's visibility is tied to customPresetFoodInputs, so no explicit toggle needed here for the button itself.
+        }
+
+        // Opens the quantity input modal
+        function openQuantityModal() {
+            if (selectedPresetFood) {
+                document.getElementById('quantityModalTitle').textContent = `Enter Grams for ${selectedPresetFood.name}`;
+                quantityInputGrams.value = ''; // Clear previous input
+                quantityInputModal.classList.add('open');
+            }
+        }
+
+        // Closes the quantity input modal
+        function closeQuantityModal() {
+            quantityInputModal.classList.remove('open');
+            selectedPresetFoodNameDisplay.textContent = '-- Select Preset Food --'; // Reset dropdown header text
+            selectedPresetFood = null; // Clear selected food
+        }
+
+        // Adds food based on grams from preset
+        async function addGramsEntry() {
+            const grams = evaluateMathExpression(quantityInputGrams.value);
+
+            if (grams === null || grams <= 0) {
+                console.error('Validation Error: Grams must be a positive number or valid math expression.');
+                return;
+            }
+
+            if (!selectedPresetFood) {
+                console.error("No preset food selected.");
+                closeQuantityModal();
+                return;
+            }
+
+            const { name, calories, protein, servingSize } = selectedPresetFood;
+
+            if (servingSize <= 0) {
+                console.error("Invalid serving size for selected preset food. Please edit preset or use manual entry.");
+                closeQuantityModal();
+                return;
+            }
+
+            const multiplier = grams / servingSize;
+            const finalCalories = calories * multiplier;
+            const finalProtein = protein * multiplier;
+
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot add grams entry. Adding to local totals only.");
+                totalProteinConsumed += finalProtein;
+                totalCaloriesConsumed += finalCalories;
+                updateSummaryDisplay();
+                closeQuantityModal();
+                return;
+            }
+
+            try {
+                showLoading(true);
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/foodEntries`), {
+                    name: `${name} (${grams}g)`,
+                    protein: finalProtein,
+                    calories: finalCalories,
+                    timestamp: serverTimestamp()
+                });
+                closeQuantityModal();
+            } catch (e) {
+                console.error("Error adding grams entry:", e);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+
+        async function addCustomPresetFood() {
+            const name = customPresetFoodInputs.querySelector('input[placeholder="Food Name"]').value.trim();
+            const calories = parseFloat(customPresetCaloriesInput.value) || 0;
+            const protein = parseFloat(customPresetProteinInput.value) || 0;
+            const servingSize = parseFloat(customPresetServingSizeInput.value) || 0; // In grams
+
+            if (!name || isNaN(calories) || calories < 0 || isNaN(protein) || protein < 0 || isNaN(servingSize) || servingSize <= 0) {
+                console.error('Please enter a valid name, non-negative calories/protein, and a positive serving size for the custom preset food.');
+                return;
+            }
+
+            if (!db || !appId || !userId) {
+                console.warn("Firestore db, appId, or userId not initialized. Cannot add custom preset. Local operation only.");
+                console.log("Adding custom preset locally (not persisted):", { name, calories, protein, servingSize });
+                // Re-populate dropdown to show the new item locally if db is not available (for dev purposes)
+                listenForPresetFoods(); // This will not work if db is truly not available, but useful during dev.
+                customPresetFoodInputs.classList.add('hidden');
+                return;
+            }
+
+            try {
+                showLoading(true);
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/presetFoods`), {
+                    name: name,
+                    calories: calories,
+                    protein: protein,
+                    servingSize: servingSize,
+                    timestamp: serverTimestamp()
+                });
+                // Clear fields and hide inputs
+                customPresetFoodInputs.querySelector('input[placeholder="Food Name"]').value = '';
+                customPresetCaloriesInput.value = '';
+                customPresetProteinInput.value = '';
+                customPresetServingSizeInput.value = '';
+                customPresetFoodInputs.classList.add('hidden');
+                selectedPresetFoodNameDisplay.textContent = '-- Select Preset Food --'; // Reset dropdown header text
+            } catch (e) {
+                console.error("Error adding custom preset food:", e);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+
         function openSettingsModal() {
             settingsProteinGoalInput.value = currentProteinGoal;
             settingsCalorieGoalInput.value = currentCalorieGoal;
@@ -1053,15 +1353,41 @@
                     </div>
                 </div>
 
-                <!-- Manual Entry -->
+                <!-- Preset Food Selection -->
                 <div>
-                    <h3 class="font-semibold text-gray-800 mb-2">Manually Add Food Macros</h3>
-                    <div class="manual-entry-grid mb-3">
-                        <input type="number" id="manualCalories" placeholder="Calories">
-                        <input type="number" id="manualProtein" placeholder="Protein (g)">
-                        <input type="text" id="manualQuantity" placeholder="Qty (e.g., 1 or 22/18)" value="1">
+                    <h3 class="font-semibold text-gray-800 mb-2">Select Preset Food</h3>
+                    <!-- Custom Preset Food Dropdown -->
+                    <div class="custom-dropdown-container">
+                        <div id="presetDropdownHeader" class="custom-dropdown-header">
+                            <span id="selectedPresetFoodName">-- Select Preset Food --</span>
+                            <span class="dropdown-arrow">&#9660;</span>
+                        </div>
+                        <div id="presetDropdownOptions" class="custom-dropdown-options hidden">
+                            <!-- Options will be dynamically populated by JavaScript -->
+                        </div>
                     </div>
-                    <button id="addManualFoodBtn" class="w-full">Add Manual Food</button>
+                    <button id="toggleCustomFoodInputBtn" class="w-full secondary-button mt-2 mb-4">Add Custom Preset Food</button>
+
+                    <!-- Custom Preset Food Inputs (hidden by default, toggled by button) -->
+                    <div id="customPresetFoodInputs" class="hidden space-y-3 mt-4">
+                        <h3 class="font-semibold text-gray-800 mb-2">Define New Preset Food</h3>
+                        <input type="text" placeholder="Food Name">
+                        <input type="number" id="customPresetCalories" placeholder="Calories per serving">
+                        <input type="number" id="customPresetProtein" placeholder="Protein (g) per serving">
+                        <input type="number" id="customPresetServingSize" placeholder="Serving Size (grams)">
+                        <button id="addCustomPresetFoodBtn" class="w-full">Add Custom Preset</button>
+                    </div>
+
+                    <!-- Manual Input Fields (always visible) -->
+                    <div id="manualInputFields" class="mt-4">
+                        <h3 class="font-semibold text-gray-800 mb-2">Manually Add Food Macros</h3>
+                        <div class="manual-entry-grid mb-3">
+                            <input type="number" id="manualCalories" placeholder="Calories">
+                            <input type="number" id="manualProtein" placeholder="Protein (g)">
+                            <input type="text" id="manualQuantity" placeholder="Qty (e.g., 1 or 22/18)" value="1">
+                        </div>
+                        <button id="addManualFoodBtn" class="w-full">Add Manual Food</button>
+                    </div>
                 </div>
             </div>
 
@@ -1108,6 +1434,19 @@
                 <input type="number" id="settingsWeight" class="w-full" placeholder="e.g., 150">
             </div>
             <button id="saveSettingsBtn" class="w-full">Save Goals</button>
+        </div>
+    </div>
+
+    <!-- Quantity Input Modal (New) -->
+    <div id="quantityInputModal" class="modal-overlay">
+        <div class="modal-content relative">
+            <button class="close-button" id="closeQuantityModalBtn">&times;</button>
+            <h2 id="quantityModalTitle" class="section-title text-gray-800 mb-4">Enter Grams</h2>
+            <div class="mb-4">
+                <label for="quantityInputGrams" class="block text-gray-700 text-sm font-bold mb-2">Grams Consumed</label>
+                <input type="text" id="quantityInputGrams" class="w-full" placeholder="e.g., 150 or 22/18">
+            </div>
+            <button id="addGramsEntryBtn" class="w-full">Add to Daily Data</button>
         </div>
     </div>
 
